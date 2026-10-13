@@ -3,9 +3,11 @@ import { ipc, errorMessage } from "../../ipc/commands";
 import type { FavoriteQuery } from "../../ipc/types";
 import { useConnections } from "../../stores/connectionsStore";
 import { useWorkspaces } from "../../stores/workspaceStore";
+import { useT } from "../../i18n";
 
 /** Vista global: favoritas de todas las conexiones/bancos a la vez. */
 export default function FavoritesView() {
+  const t = useT();
   const [favorites, setFavorites] = useState<FavoriteQuery[]>([]);
   const [filter, setFilter] = useState("");
   const [connFilter, setConnFilter] = useState("all");
@@ -43,14 +45,14 @@ export default function FavoritesView() {
   return (
     <div className="global-view">
       <div className="cm-header">
-        <h2>★ Queries favoritas</h2>
+        <h2>{t("fav.title")}</h2>
         <input
-          placeholder="Buscar…"
+          placeholder={t("fav.search")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
         <select value={connFilter} onChange={(e) => setConnFilter(e.target.value)}>
-          <option value="all">Todas las conexiones</option>
+          <option value="all">{t("common.allConnections")}</option>
           {saved.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -59,7 +61,7 @@ export default function FavoritesView() {
         </select>
       </div>
       {error && <div className="error-banner">{error}</div>}
-      {shown.length === 0 && <p className="dim">Sin favoritas.</p>}
+      {shown.length === 0 && <p className="dim">{t("fav.empty")}</p>}
       <div className="fav-list">
         {shown.map((fav) => (
           <div key={fav.id} className="fav-card">
@@ -71,7 +73,7 @@ export default function FavoritesView() {
               </span>
               <span className="spacer" />
               <button className="primary" onClick={() => void openFavorite(fav)}>
-                Abrir
+                {t("common.open")}
               </button>
               <button
                 className="danger"
@@ -79,7 +81,7 @@ export default function FavoritesView() {
                   void ipc.deleteFavorite(fav.id).then(load);
                 }}
               >
-                Eliminar
+                {t("common.delete")}
               </button>
             </div>
             <pre className="fav-sql">{fav.sql}</pre>

@@ -35,7 +35,7 @@ function build(view: EditorView): DecorationSet {
   return builder.finish();
 }
 
-/** Resalta las líneas del statement bajo el cursor (TablePlus: highlight current query). */
+/** Resalta las líneas del statement bajo el cursor. */
 export const currentStatementHighlight = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;

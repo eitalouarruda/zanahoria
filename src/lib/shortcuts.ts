@@ -1,56 +1,117 @@
-import { useEffect, useRef } from "react";
-
-/**
- * Atajo en formato "Mod-Shift-Alt-<tecla>" (Mod = Ctrl, o Cmd en macOS).
- * La tecla se compara con `KeyboardEvent.key` sin distinguir mayúsculas.
- */
-export type Shortcut = string;
+import { useEffect, useRef, type MutableRefObject } from "react";
+import { useSettings } from "../stores/settingsStore";
+import {
+  formatShortcut,
+  isModifierOnly,
+  keysFor,
+  matchesCombo,
+  type ActionId,
+} from "./keymap";
 
 export interface Binding {
-  keys: Shortcut[];
+  action: ActionId;
   run: () => void;
   /** Si es false el atajo se ignora (por ejemplo, sin cambios pendientes). */
   enabled?: boolean;
 }
 
-const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+/** Atajos fijos que no se configuran (cerrar diálogos con Esc). */
+export interface RawBinding {
+  keys: string[];
+  run: () => void;
+  enabled?: boolean;
+}
 
-function matches(e: KeyboardEvent, shortcut: Shortcut): boolean {
-  const parts = shortcut.split("-");
-  // "Mod--" (tecla "-") deja un elemento vacío al final.
-  let key = parts.pop() ?? "";
-  if (key === "" && shortcut.endsWith("-")) key = "-";
-  const mods = new Set(parts);
-  const mod = isMac ? e.metaKey : e.ctrlKey;
-  if (mods.has("Mod") !== mod) return false;
-  if (mods.has("Shift") !== e.shiftKey) return false;
-  if (mods.has("Alt") !== e.altKey) return false;
-  return e.key.toLowerCase() === key.toLowerCase();
+type AnyBinding = Binding | RawBinding;
+
+/** Grupos de atajos montados (App, workspace activo…), en orden de registro. */
+const groups = new Set<MutableRefObject<AnyBinding[]>>();
+
+/** Primer paso de una secuencia ya pulsado (p. ej. Ctrl+Space). */
+let pendingPrefix: { combo: string; expires: number } | null = null;
+/** true mientras Settings graba un atajo nuevo: ninguno se dispara. */
+let suspended = false;
+const CHORD_TIMEOUT_MS = 1500;
+
+/** Teclas efectivas de cada binding activo, con las redefiniciones del usuario. */
+function activeBindings() {
+  const overrides = useSettings.getState().shortcuts;
+  const out: { run: () => void; keys: string[] }[] = [];
+  for (const group of groups) {
+    for (const b of group.current) {
+      if (b.enabled === false) continue;
+      out.push({ run: b.run, keys: "action" in b ? keysFor(b.action, overrides) : b.keys });
+    }
+  }
+  return out;
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if (suspended || isModifierOnly(e)) return;
+  const consume = (run?: () => void) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    run?.();
+  };
+  const bindings = activeBindings();
+
+  // Segundo paso de una secuencia: corre la acción o se cancela.
+  if (pendingPrefix) {
+    const { combo, expires } = pendingPrefix;
+    pendingPrefix = null;
+    if (Date.now() < expires) {
+      for (const { run, keys } of bindings) {
+        for (const k of keys) {
+          const [first, second] = k.split(" ");
+          if (second && first === combo && matchesCombo(e, second)) return consume(run);
+        }
+      }
+      // Tecla que no completa ninguna secuencia: se descarta (como tmux).
+      return consume();
+    }
+  }
+
+  for (const { run, keys } of bindings) {
+    for (const k of keys) {
+      const steps = k.split(" ");
+      if (!matchesCombo(e, steps[0])) continue;
+      if (steps.length === 1) return consume(run);
+      pendingPrefix = { combo: steps[0], expires: Date.now() + CHORD_TIMEOUT_MS };
+      return consume();
+    }
+  }
 }
 
 /**
- * Registra atajos de teclado a nivel de ventana, en fase de captura para que
- * tengan prioridad sobre los keymaps de CodeMirror. Los handlers se leen de
- * un ref, así que pueden cerrar sobre el estado actual sin re-registrar.
+ * Registra atajos mientras el componente está montado. Un único listener de
+ * ventana (fase de captura, con prioridad sobre CodeMirror) atiende a todos
+ * los grupos. Los handlers se leen de un ref: pueden cerrar sobre el estado
+ * actual sin re-registrar.
  */
-export function useShortcuts(bindings: Binding[], active = true) {
+export function useShortcuts(bindings: AnyBinding[], active = true) {
   const ref = useRef(bindings);
   ref.current = bindings;
 
   useEffect(() => {
     if (!active) return;
-    const onKey = (e: KeyboardEvent) => {
-      for (const b of ref.current) {
-        if (b.enabled === false) continue;
-        if (b.keys.some((k) => matches(e, k))) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          b.run();
-          return;
-        }
-      }
+    if (groups.size === 0) window.addEventListener("keydown", onKeyDown, true);
+    groups.add(ref);
+    return () => {
+      groups.delete(ref);
+      if (groups.size === 0) window.removeEventListener("keydown", onKeyDown, true);
     };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
   }, [active]);
+}
+
+/** Suspende todos los atajos (p. ej. mientras se graba uno nuevo en Settings). */
+export function setShortcutsSuspended(value: boolean) {
+  suspended = value;
+  pendingPrefix = null;
+}
+
+/** Texto del primer atajo de una acción ("Ctrl+K"), o "" si no tiene. */
+export function useShortcutLabel(action: ActionId): string {
+  const overrides = useSettings((s) => s.shortcuts);
+  const keys = keysFor(action, overrides);
+  return keys.length > 0 ? formatShortcut(keys[0]) : "";
 }

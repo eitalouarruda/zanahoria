@@ -2,6 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ConnectionConfig, Engine } from "../../ipc/types";
 import { ipc, errorMessage } from "../../ipc/commands";
+import { useT } from "../../i18n";
 
 const ENGINES: { value: Engine; label: string }[] = [
   { value: "postgres", label: "PostgreSQL" },
@@ -41,6 +42,7 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
       color: null,
     },
   );
+  const t = useT();
   const [testResult, setTestResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -57,7 +59,7 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
     setTestResult(null);
     try {
       await ipc.testConnection(config);
-      setTestResult("✓ Conexión exitosa");
+      setTestResult(t("form.testOk"));
     } catch (e) {
       setTestResult(`✗ ${errorMessage(e)}`);
     } finally {
@@ -67,13 +69,13 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
 
   return (
     <div className="connection-form">
-      <h3>{initial ? "Editar conexión" : "Nueva conexión"}</h3>
+      <h3>{initial ? t("form.editTitle") : t("form.newTitle")}</h3>
       <label>
-        Nombre
+        {t("form.name")}
         <input value={config.name} onChange={(e) => set("name", e.target.value)} />
       </label>
       <label>
-        Motor
+        {t("form.engine")}
         <select
           value={config.engine}
           onChange={(e) => setEngine(e.target.value as Engine)}
@@ -87,12 +89,12 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
       </label>
       {isFile ? (
         <label>
-          Archivo
+          {t("form.file")}
           <div className="file-row">
             <input
               value={config.database}
               onChange={(e) => set("database", e.target.value)}
-              placeholder="/ruta/al/archivo.sqlite"
+              placeholder={t("form.filePlaceholder")}
             />
             <button
               onClick={async () => {
@@ -108,11 +110,11 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
         <>
           <div className="form-row">
             <label>
-              Host
+              {t("form.host")}
               <input value={config.host} onChange={(e) => set("host", e.target.value)} />
             </label>
             <label className="port">
-              Puerto
+              {t("form.port")}
               <input
                 type="number"
                 value={config.port ?? ""}
@@ -124,21 +126,21 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
           </div>
           <div className="form-row">
             <label>
-              Usuario
+              {t("form.user")}
               <input value={config.user} onChange={(e) => set("user", e.target.value)} />
             </label>
             <label>
-              Password
+              {t("form.password")}
               <input
                 type="password"
                 value={config.password ?? ""}
                 onChange={(e) => set("password", e.target.value)}
-                placeholder={initial ? "(sin cambios)" : ""}
+                placeholder={initial ? t("form.passwordUnchanged") : ""}
               />
             </label>
           </div>
           <label>
-            Database {config.engine === "redis" && "(número, ej: 0)"}
+            {t("form.database")} {config.engine === "redis" && t("form.redisDbHint")}
             <input
               value={config.database}
               onChange={(e) => set("database", e.target.value)}
@@ -150,7 +152,7 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
               checked={config.useTls}
               onChange={(e) => set("useTls", e.target.checked)}
             />
-            Usar TLS
+            {t("form.useTls")}
           </label>
         </>
       )}
@@ -161,9 +163,7 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
           onChange={(e) => set("safeMode", e.target.checked)}
         />
         <span>
-          <strong>Safe Mode</strong> — queda guardado en esta conexión: toda
-          modificación exige revisar el SQL antes de aplicar, corre en
-          transacción y los UPDATE/DELETE sin WHERE piden confirmación.
+          <strong>Safe Mode</strong> — {t("form.safeModeDesc")}
         </span>
       </label>
       {testResult && (
@@ -172,9 +172,9 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
         </p>
       )}
       <div className="modal-actions">
-        <button onClick={onCancel}>Cancelar</button>
+        <button onClick={onCancel}>{t("common.cancel")}</button>
         <button disabled={busy} onClick={() => void test()}>
-          {busy ? "Probando…" : "Probar conexión"}
+          {busy ? t("form.testing") : t("form.test")}
         </button>
         <button
           className="primary"
@@ -185,7 +185,7 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
             void onSave(toSave);
           }}
         >
-          Guardar
+          {t("common.save")}
         </button>
       </div>
     </div>

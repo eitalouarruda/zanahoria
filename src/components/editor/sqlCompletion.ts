@@ -16,7 +16,7 @@ import {
 import type { DbSchema, Engine, Table } from "../../ipc/types";
 import { statementAt } from "./statements";
 
-// ---- Recencia: lo elegido antes sube en la lista (TablePlus: recent_matched_keywords) ----
+// ---- Recencia: lo elegido antes sube en la lista ----
 
 const RECENT_KEY = "zanahoria.completion.recent";
 const RECENT_MAX = 200;
@@ -208,7 +208,7 @@ function contextColumnSource(getSchema: () => DbSchema | null): CompletionSource
 }
 
 /**
- * Soporte SQL con completado al estilo TablePlus: keywords, tablas y
+ * Soporte SQL con completado contextual: keywords, tablas y
  * columnas con tipo, columnas de las tablas del statement actual sin
  * calificar, y boost por uso reciente.
  */

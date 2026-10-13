@@ -4,6 +4,7 @@ import { useWorkspaces } from "../../stores/workspaceStore";
 import { ipc, errorMessage } from "../../ipc/commands";
 import type { ConnectionConfig, SavedConnection } from "../../ipc/types";
 import ConnectionForm from "./ConnectionForm";
+import { useT } from "../../i18n";
 
 const ENGINE_ICONS: Record<string, string> = {
   postgres: "🐘",
@@ -14,6 +15,7 @@ const ENGINE_ICONS: Record<string, string> = {
 };
 
 export default function ConnectionManager() {
+  const t = useT();
   const { saved, statuses, errors, save, remove, connect } = useConnections();
   const { openWorkspace } = useWorkspaces();
   const [editing, setEditing] = useState<ConnectionConfig | null | "new">(null);
@@ -55,14 +57,14 @@ export default function ConnectionManager() {
   return (
     <div className="connection-manager">
       <div className="cm-header">
-        <h2>Conexiones</h2>
+        <h2>{t("conn.title")}</h2>
         <button className="primary" onClick={() => setEditing("new")}>
-          + Nueva conexión
+          {t("conn.new")}
         </button>
       </div>
       {failure && <div className="error-banner">{failure}</div>}
       {saved.length === 0 && (
-        <p className="dim">No hay conexiones guardadas todavía.</p>
+        <p className="dim">{t("conn.empty")}</p>
       )}
       <div className="connection-list">
         {saved.map((conn) => (
@@ -83,30 +85,40 @@ export default function ConnectionManager() {
                 <span className="test-fail">{errors[conn.id]}</span>
               )}
             </div>
-            {conn.safeMode && <span className="safe-badge">SAFE</span>}
-            <span className={`status-dot ${statuses[conn.id] ?? "disconnected"}`} />
+            {conn.safeMode ? (
+              <span className="safe-badge">{t("safe.on")}</span>
+            ) : (
+              <span className="safe-badge off">{t("safe.off")}</span>
+            )}
+            {/* Estado solo cuando aporta algo (conectado / conectando / error). */}
+            {statuses[conn.id] && statuses[conn.id] !== "disconnected" && (
+              <span
+                className={`status-dot ${statuses[conn.id]}`}
+                title={t(`conn.status.${statuses[conn.id] as "connected" | "connecting" | "error"}`)}
+              />
+            )}
             <div className="conn-actions">
               <button
                 className="primary"
                 disabled={statuses[conn.id] === "connecting"}
                 onClick={() => void openConnection(conn)}
               >
-                {statuses[conn.id] === "connecting" ? "Conectando…" : "Conectar"}
+                {statuses[conn.id] === "connecting" ? t("conn.connecting") : t("conn.connect")}
               </button>
               <button
                 onClick={() => setEditing({ ...conn, password: "" })}
               >
-                Editar
+                {t("common.edit")}
               </button>
               <button
                 className="danger"
                 onClick={() => {
-                  if (window.confirm(`¿Eliminar la conexión "${conn.name}"?`)) {
+                  if (window.confirm(t("conn.confirmDelete", { name: conn.name }))) {
                     void remove(conn.id);
                   }
                 }}
               >
-                Eliminar
+                {t("common.delete")}
               </button>
             </div>
           </div>

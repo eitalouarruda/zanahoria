@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { ipc, errorMessage } from "../../ipc/commands";
+import { useT } from "../../i18n";
 import type {
   BackupEvent,
   Engine,
@@ -20,6 +21,7 @@ interface Props {
 type Mode = "backup" | "restore" | "tools";
 
 export default function BackupModal({ connId, connName, engine, database, onClose }: Props) {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("backup");
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [log, setLog] = useState<string[]>([]);
@@ -67,7 +69,7 @@ export default function BackupModal({ connId, connName, engine, database, onClos
         const dest = await save({ defaultPath: `${connName}.sqlite` });
         if (!dest) return;
         await ipc.sqliteBackup(connId, dest);
-        setDone("✓ Respaldo completado (VACUUM INTO)");
+        setDone(t("backup.sqliteDone"));
         return;
       }
       const ext = engine === "postgres" && format === "custom" ? "dump" : "sql";
@@ -120,7 +122,7 @@ export default function BackupModal({ connId, connName, engine, database, onClos
     <div className="modal-backdrop" onClick={running ? undefined : onClose}>
       <div className="modal backup-modal" onClick={(e) => e.stopPropagation()}>
         <h3>
-          Respaldos — {connName}
+          {t("backup.title", { name: connName })}
           <span className="spacer" />
           {(["backup", "restore", "tools"] as Mode[]).map((m) => (
             <button
@@ -128,33 +130,37 @@ export default function BackupModal({ connId, connName, engine, database, onClos
               className={mode === m ? "primary" : ""}
               onClick={() => setMode(m)}
             >
-              {m === "backup" ? "Backup" : m === "restore" ? "Restore" : "Herramientas"}
+              {m === "backup"
+                ? t("backup.tabBackup")
+                : m === "restore"
+                  ? t("backup.tabRestore")
+                  : t("backup.tabTools")}
             </button>
           ))}
         </h3>
 
         {mode === "tools" && (
           <div className="tools-list">
-            {tools.map((t) => (
-              <div key={t.name} className="tool-row">
-                <code>{t.name}</code>
-                {t.path ? (
+            {tools.map((tool) => (
+              <div key={tool.name} className="tool-row">
+                <code>{tool.name}</code>
+                {tool.path ? (
                   <span className="test-ok">
-                    {t.version ?? "encontrado"} — {t.path}
+                    {tool.version ?? t("backup.found")} — {tool.path}
                   </span>
                 ) : (
-                  <span className="test-fail">no encontrado</span>
+                  <span className="test-fail">{t("backup.notFound")}</span>
                 )}
                 <button
                   onClick={async () => {
                     const p = await open({ multiple: false });
                     if (typeof p === "string") {
-                      await ipc.setBackupToolPath(t.name, p);
+                      await ipc.setBackupToolPath(tool.name, p);
                       setTools(await ipc.detectBackupTools());
                     }
                   }}
                 >
-                  Elegir ruta…
+                  {t("backup.choosePath")}
                 </button>
               </div>
             ))}
@@ -165,17 +171,16 @@ export default function BackupModal({ connId, connName, engine, database, onClos
           <div className="backup-form">
             {isSqlite ? (
               <p className="dim">
-                SQLite se respalda con una copia consistente del archivo (VACUUM
-                INTO) — no requiere herramientas externas.
+                {t("backup.sqliteNote")}
               </p>
             ) : (
               <>
                 {engine === "postgres" && (
                   <label>
-                    Formato
+                    {t("backup.format")}
                     <select value={format} onChange={(e) => setFormat(e.target.value)}>
-                      <option value="custom">Custom (-Fc, recomendado)</option>
-                      <option value="plain">Plain SQL</option>
+                      <option value="custom">{t("backup.formatCustom")}</option>
+                      <option value="plain">{t("backup.formatPlain")}</option>
                     </select>
                   </label>
                 )}
@@ -188,7 +193,7 @@ export default function BackupModal({ connId, connName, engine, database, onClos
                       if (e.target.checked) setDataOnly(false);
                     }}
                   />
-                  Solo estructura (schema only)
+                  {t("backup.schemaOnly")}
                 </label>
                 <label className="checkbox">
                   <input
@@ -199,13 +204,13 @@ export default function BackupModal({ connId, connName, engine, database, onClos
                       if (e.target.checked) setSchemaOnly(false);
                     }}
                   />
-                  Solo datos (data only)
+                  {t("backup.dataOnly")}
                 </label>
               </>
             )}
             <div className="modal-actions">
               <button className="primary" disabled={running} onClick={() => void startBackup()}>
-                {running ? "Ejecutando…" : "Iniciar backup"}
+                {running ? t("common.running") : t("backup.start")}
               </button>
             </div>
           </div>
@@ -214,20 +219,20 @@ export default function BackupModal({ connId, connName, engine, database, onClos
         {mode === "restore" && (
           <div className="backup-form">
             <label>
-              Archivo de dump
+              {t("backup.dumpFile")}
               <div className="file-row">
-                <input value={input} readOnly placeholder="Elegir archivo…" />
+                <input value={input} readOnly placeholder={t("backup.pickFile")} />
                 <button onClick={() => void pickRestoreFile()}>…</button>
               </div>
             </label>
             {sniff && (
               <p className={sniff.kind === "unknown" ? "test-fail" : "test-ok"}>
-                Formato detectado: {sniff.note}
-                {sniff.restoreTool && ` → se restaurará con ${sniff.restoreTool}`}
+                {t("backup.detected", { note: sniff.note })}
+                {sniff.restoreTool && t("backup.restoreWith", { tool: sniff.restoreTool })}
               </p>
             )}
             <label>
-              Database destino
+              {t("backup.targetDb")}
               <input value={targetDb} onChange={(e) => setTargetDb(e.target.value)} />
             </label>
             {engine === "postgres" && (
@@ -238,7 +243,7 @@ export default function BackupModal({ connId, connName, engine, database, onClos
                     checked={clean}
                     onChange={(e) => setClean(e.target.checked)}
                   />
-                  --clean (eliminar objetos antes de recrear)
+                  {t("backup.clean")}
                 </label>
                 <label className="checkbox">
                   <input
@@ -246,7 +251,7 @@ export default function BackupModal({ connId, connName, engine, database, onClos
                     checked={singleTx}
                     onChange={(e) => setSingleTx(e.target.checked)}
                   />
-                  --single-transaction (todo o nada)
+                  {t("backup.singleTx")}
                 </label>
               </>
             )}
@@ -256,7 +261,7 @@ export default function BackupModal({ connId, connName, engine, database, onClos
                 disabled={running || !input || !targetDb || sniff?.kind === "unknown"}
                 onClick={() => void startRestore()}
               >
-                {running ? "Ejecutando…" : "Iniciar restore"}
+                {running ? t("common.running") : t("backup.startRestore")}
               </button>
             </div>
           </div>
@@ -276,11 +281,11 @@ export default function BackupModal({ connId, connName, engine, database, onClos
         <div className="modal-actions">
           {running && jobId && (
             <button className="danger" onClick={() => void ipc.cancelJob(jobId)}>
-              Cancelar job
+              {t("backup.cancelJob")}
             </button>
           )}
           <button onClick={onClose} disabled={running}>
-            Cerrar
+            {t("common.close")}
           </button>
         </div>
       </div>

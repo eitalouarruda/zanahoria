@@ -9,7 +9,7 @@ const LANGUAGE: Record<Engine, string> = {
   redis: "sql",
 };
 
-/** Beautify de la query (Ctrl+I, como TablePlus). */
+/** Beautify de la query (Ctrl+I). */
 export function beautify(sql: string, engine: Engine): string {
   try {
     return sqlFormat(sql, {

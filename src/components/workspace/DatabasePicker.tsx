@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ipc } from "../../ipc/commands";
+import { useT } from "../../i18n";
 
 interface Props {
   connId: string;
@@ -11,11 +12,12 @@ interface Props {
 }
 
 /**
- * "Open a database" (Ctrl+K / Cmd+K), como TablePlus: lista filtrable de las
+ * "Open a database" (Ctrl+K / Cmd+K): lista filtrable de las
  * databases del servidor conectado. Flechas para moverse, Enter abre la
  * database elegida en un tab nuevo.
  */
 export default function DatabasePicker({ connId, current, databases, onSelect, onClose }: Props) {
+  const t = useT();
   const [all, setAll] = useState(databases);
   const [filter, setFilter] = useState("");
   const [index, setIndex] = useState(0);
@@ -90,7 +92,7 @@ export default function DatabasePicker({ connId, current, databases, onSelect, o
       <div className="modal picker" onClick={(e) => e.stopPropagation()}>
         <input
           autoFocus
-          placeholder="Filtrar databases…"
+          placeholder={t("picker.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           onKeyDown={onKeyDown}
@@ -106,12 +108,12 @@ export default function DatabasePicker({ connId, current, databases, onSelect, o
               onClick={() => choose(db)}
             >
               {db}
-              {db === current && <span className="dim"> · actual</span>}
+              {db === current && <span className="dim">{t("picker.current")}</span>}
             </li>
           ))}
-          {items.length === 0 && <li className="dim empty">Sin coincidencias</li>}
+          {items.length === 0 && <li className="dim empty">{t("picker.empty")}</li>}
         </ul>
-        <div className="picker-hint dim">↑↓ navegar · Enter abrir · Esc cerrar</div>
+        <div className="picker-hint dim">{t("picker.hint")}</div>
       </div>
     </div>
   );

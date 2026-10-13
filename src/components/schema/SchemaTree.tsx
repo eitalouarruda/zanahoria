@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { DbSchema } from "../../ipc/types";
+import { useT } from "../../i18n";
 
 interface Props {
   schema: DbSchema | null;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function SchemaTree({ schema, error, onBrowseTable, onRefresh }: Props) {
+  const t = useT();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState("");
 
@@ -18,10 +20,10 @@ export default function SchemaTree({ schema, error, onBrowseTable, onRefresh }: 
         {error ? (
           <>
             <p className="test-fail">{error}</p>
-            <button onClick={onRefresh}>Reintentar</button>
+            <button onClick={onRefresh}>{t("common.retry")}</button>
           </>
         ) : (
-          <p className="dim">Cargando schema…</p>
+          <p className="dim">{t("schema.loading")}</p>
         )}
       </div>
     );
@@ -33,39 +35,39 @@ export default function SchemaTree({ schema, error, onBrowseTable, onRefresh }: 
     <div className="schema-tree">
       <div className="schema-toolbar">
         <input
-          placeholder="Filtrar tablas…"
+          placeholder={t("schema.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <button title="Refrescar schema" onClick={onRefresh}>
-          ⟳
+        <button title={t("schema.refresh")} onClick={onRefresh}>
+          ↻
         </button>
       </div>
       {schema.namespaces.map((ns) => {
-        const tables = ns.tables.filter((t) =>
-          t.name.toLowerCase().includes(filter.toLowerCase()),
+        const tables = ns.tables.filter((tb) =>
+          tb.name.toLowerCase().includes(filter.toLowerCase()),
         );
         return (
           <div key={ns.name}>
             {!single && <div className="schema-ns">{ns.name}</div>}
-            {tables.map((t) => {
-              const key = `${ns.name}.${t.name}`;
+            {tables.map((tb) => {
+              const key = `${ns.name}.${tb.name}`;
               return (
                 <div key={key}>
                   <div
                     className="schema-table"
                     onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))}
                     onDoubleClick={() =>
-                      onBrowseTable(single ? null : ns.name, t.name)
+                      onBrowseTable(single ? null : ns.name, tb.name)
                     }
-                    title="Doble click: ver datos"
+                    title={t("schema.browseHint")}
                   >
-                    <span className="table-icon">{t.kind === "view" ? "👁" : "▤"}</span>
-                    {t.name}
+                    <span className="table-icon">{tb.kind === "view" ? "👁" : "▤"}</span>
+                    {tb.name}
                   </div>
                   {open[key] && (
                     <div className="schema-columns">
-                      {t.columns.map((c) => (
+                      {tb.columns.map((c) => (
                         <div key={c.name} className="schema-column">
                           <span className={c.isPk ? "pk" : ""}>{c.name}</span>
                           <span className="col-type">{c.dbType}</span>

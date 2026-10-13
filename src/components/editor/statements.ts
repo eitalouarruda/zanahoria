@@ -82,7 +82,7 @@ function trimRange(sql: string, r: StatementRange): StatementRange {
 /**
  * Statement que contiene la posición del cursor. Si el cursor queda en un
  * tramo vacío (por ejemplo justo después del último ';'), se usa el
- * statement anterior no vacío, como hace TablePlus.
+ * statement anterior no vacío.
  */
 export function statementAt(sql: string, pos: number): StatementRange | null {
   const ranges = splitStatements(sql);

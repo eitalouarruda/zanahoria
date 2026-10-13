@@ -1,4 +1,5 @@
 import type { MutationPreview } from "../../ipc/types";
+import { useT } from "../../i18n";
 
 interface Props {
   preview: MutationPreview;
@@ -16,31 +17,30 @@ export default function CodePreviewModal({
   onDiscard,
   onClose,
 }: Props) {
+  const t = useT();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal code-preview" onClick={(e) => e.stopPropagation()}>
         <h3>
-          Code Review{" "}
-          {preview.safeMode && <span className="safe-badge">SAFE MODE</span>}
+          {t("preview.title")}{" "}
+          {preview.safeMode && <span className="safe-badge">{t("safe.on")}</span>}
         </h3>
         <pre className="preview-sql">
           {preview.statements.map((s) => s.previewSql + ";").join("\n")}
         </pre>
         <p className="dim">
-          {preview.statements.length} statement(s) — se ejecuta en una transacción
-          {preview.safeMode &&
-            " con verificación de filas afectadas (rollback si no coincide)"}
-          .
+          {t("preview.summary", { n: preview.statements.length })}
+          {preview.safeMode && t("preview.safeCheck")}.
         </p>
         <div className="modal-actions">
           <button className="danger" onClick={onDiscard} disabled={applying}>
-            Discard
+            {t("ws.discard")}
           </button>
           <button onClick={onClose} disabled={applying}>
-            Seguir editando
+            {t("preview.keepEditing")}
           </button>
           <button className="primary" onClick={onCommit} disabled={applying}>
-            {applying ? "Aplicando…" : "Commit"}
+            {applying ? t("preview.applying") : t("preview.commit")}
           </button>
         </div>
       </div>

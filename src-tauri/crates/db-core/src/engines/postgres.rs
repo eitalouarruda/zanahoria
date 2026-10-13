@@ -42,7 +42,7 @@ impl PgEngine {
                 if msg.contains(super::pg_diag::NON_UTF8_ERROR) {
                     if let Some(real) = super::pg_diag::raw_auth_error(cfg).await {
                         return Err(DbError::Connection(format!(
-                            "{real} (mensaje del servidor en encoding no UTF-8, decodificado como Latin-1)"
+                            "{real} (server message was not UTF-8; decoded as Latin-1)"
                         )));
                     }
                 }

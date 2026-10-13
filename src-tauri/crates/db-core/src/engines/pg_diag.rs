@@ -133,7 +133,7 @@ fn parse_error(body: &[u8]) -> String {
         }
         rest = tail.get(end + 1..).unwrap_or(&[]);
     }
-    let mut out = message.unwrap_or_else(|| "error desconocido".into());
+    let mut out = message.unwrap_or_else(|| "unknown error".into());
     if let Some(s) = severity {
         out = format!("{s}: {out}");
     }

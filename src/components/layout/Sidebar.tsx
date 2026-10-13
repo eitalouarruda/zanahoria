@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useConnections } from "../../stores/connectionsStore";
 import { useWorkspaces } from "../../stores/workspaceStore";
 import ContextMenu from "./ContextMenu";
+import { useT } from "../../i18n";
 
 const ENGINE_ICONS: Record<string, string> = {
   postgres: "🐘",
@@ -13,6 +14,7 @@ const ENGINE_ICONS: Record<string, string> = {
 
 /** Rail vertical: home + workspaces abiertos + vistas globales. */
 export default function Sidebar() {
+  const t = useT();
   const { saved } = useConnections();
   const { workspaces, order, active, setActive, closeWorkspace } = useWorkspaces();
   const [menu, setMenu] = useState<{ wsId: string; x: number; y: number } | null>(null);
@@ -22,7 +24,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <button
         className={`rail-btn ${active === "home" ? "active" : ""}`}
-        title="Conexiones"
+        title={t("sidebar.connections")}
         onClick={() => setActive("home")}
       >
         🥕
@@ -36,7 +38,7 @@ export default function Sidebar() {
           <button
             key={wsId}
             className={`rail-conn ${active === wsId ? "active" : ""}`}
-            title={`${conn?.name ?? ws?.connId}${ws?.database ? ` / ${ws.database}` : ""}\n(click derecho: opciones)`}
+            title={`${conn?.name ?? ws?.connId}${ws?.database ? ` / ${ws.database}` : ""}\n${t("sidebar.rightClick")}`}
             onClick={() => setActive(wsId)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -45,7 +47,8 @@ export default function Sidebar() {
           >
             <span
               className="rail-conn-icon"
-              style={conn?.color ? { borderColor: conn.color } : undefined}
+              // Color de la conexión como franja inferior; el borde marca la activa.
+              style={conn?.color ? { boxShadow: `inset 0 -3px 0 ${conn.color}` } : undefined}
             >
               {ENGINE_ICONS[conn?.engine ?? ""] ?? "🗄"}
             </span>
@@ -56,17 +59,24 @@ export default function Sidebar() {
       <div className="rail-spacer" />
       <button
         className={`rail-btn ${active === "favorites" ? "active" : ""}`}
-        title="Queries favoritas (todas las conexiones)"
+        title={t("sidebar.favorites")}
         onClick={() => setActive("favorites")}
       >
         ★
       </button>
       <button
         className={`rail-btn ${active === "history" ? "active" : ""}`}
-        title="Historial de queries"
+        title={t("sidebar.history")}
         onClick={() => setActive("history")}
       >
         🕘
+      </button>
+      <button
+        className={`rail-btn ${active === "settings" ? "active" : ""}`}
+        title={t("sidebar.settings")}
+        onClick={() => setActive("settings")}
+      >
+        ⚙
       </button>
       {menu && (
         <ContextMenu
@@ -75,12 +85,12 @@ export default function Sidebar() {
           onClose={closeMenu}
           items={[
             {
-              label: "Cerrar",
+              label: t("menu.close"),
               danger: true,
               onSelect: () => closeWorkspace(menu.wsId),
             },
             {
-              label: "Cerrar las demás",
+              label: t("menu.closeOthers"),
               disabled: order.length < 2,
               onSelect: () =>
                 order.filter((id) => id !== menu.wsId).forEach((id) => closeWorkspace(id)),

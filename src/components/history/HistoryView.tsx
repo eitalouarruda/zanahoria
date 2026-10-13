@@ -3,8 +3,10 @@ import { ipc } from "../../ipc/commands";
 import type { HistoryEntry } from "../../ipc/types";
 import { useConnections } from "../../stores/connectionsStore";
 import { useWorkspaces } from "../../stores/workspaceStore";
+import { useT } from "../../i18n";
 
 export default function HistoryView() {
+  const t = useT();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [search, setSearch] = useState("");
   const [connFilter, setConnFilter] = useState("all");
@@ -35,14 +37,14 @@ export default function HistoryView() {
   return (
     <div className="global-view">
       <div className="cm-header">
-        <h2>🕘 Historial</h2>
+        <h2>{t("history.title")}</h2>
         <input
-          placeholder="Buscar en el SQL…"
+          placeholder={t("history.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         <select value={connFilter} onChange={(e) => setConnFilter(e.target.value)}>
-          <option value="all">Todas las conexiones</option>
+          <option value="all">{t("common.allConnections")}</option>
           {saved.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -57,10 +59,10 @@ export default function HistoryView() {
               .then(() => setEntries([]));
           }}
         >
-          Limpiar
+          {t("history.clear")}
         </button>
       </div>
-      {entries.length === 0 && <p className="dim">Sin historial.</p>}
+      {entries.length === 0 && <p className="dim">{t("history.empty")}</p>}
       <div className="history-list">
         {entries.map((e) => (
           <div key={e.id} className="history-row" onDoubleClick={() => void reopen(e)}>

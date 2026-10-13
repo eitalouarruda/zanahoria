@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { DbValue } from "../../ipc/types";
 import { dbValueToDisplay, displayToDbValue } from "../../ipc/types";
 import { useWorkspaces, type QueryTab } from "../../stores/workspaceStore";
+import { useT } from "../../i18n";
 
 interface Props {
   /** Id del workspace en el store. */
@@ -14,6 +15,7 @@ const ROW_HEIGHT = 26;
 
 export default function ResultsGrid({ wsId, tab }: Props) {
   const { editCell, toggleDeleteRow, editInsertCell, removeInsertRow } = useWorkspaces();
+  const t = useT();
   const parentRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<{
     row: number;
@@ -221,14 +223,14 @@ export default function ResultsGrid({ wsId, tab }: Props) {
                   {editability?.editable &&
                     (isInsert ? (
                       <button
-                        title="Quitar fila nueva"
+                        title={t("grid.removeNewRow")}
                         onClick={() => removeInsertRow(wsId, tab.id, rowIndex - rows.length)}
                       >
                         ×
                       </button>
                     ) : (
                       <button
-                        title={deleted ? "Restaurar fila" : "Marcar para eliminar"}
+                        title={deleted ? t("grid.restoreRow") : t("grid.markDelete")}
                         onClick={() => toggleDeleteRow(wsId, tab.id, rowIndex)}
                       >
                         {deleted ? "↺" : "−"}

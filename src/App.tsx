@@ -6,15 +6,18 @@ import ConnectionManager from "./components/connections/ConnectionManager";
 import WorkspaceView from "./components/workspace/WorkspaceView";
 import FavoritesView from "./components/favorites/FavoritesView";
 import HistoryView from "./components/history/HistoryView";
+import SettingsView from "./components/settings/SettingsView";
 import { useConnections } from "./stores/connectionsStore";
 import { useSettings } from "./stores/settingsStore";
 import { useWorkspaces } from "./stores/workspaceStore";
 import type { QueryEvent } from "./ipc/types";
 import { useShortcuts } from "./lib/shortcuts";
+import { useApplyTheme } from "./lib/theme";
 
 export default function App() {
   const load = useConnections((s) => s.load);
   const { workspaces, active } = useWorkspaces();
+  useApplyTheme();
 
   useEffect(() => {
     void load();
@@ -39,15 +42,16 @@ export default function App() {
   };
   const settings = useSettings.getState;
 
-  // Atajos globales de TablePlus (ActionService.class_init, TablePlus Linux 0.1.316).
+  // Atajos globales (configurables en Settings → Keyboard shortcuts).
   useShortcuts([
-    { keys: ["Mod-n", "Mod-Shift-n"], run: () => useWorkspaces.getState().setActive("home") },
-    { keys: ["Mod-Shift-]", "Mod-Shift-}"], run: () => cycleWorkspace(1) },
-    { keys: ["Mod-Shift-[", "Mod-Shift-{"], run: () => cycleWorkspace(-1) },
-    { keys: ["Mod-=", "Mod-+", "Mod-Shift-+"], run: () => settings().bumpEditorFontSize(1) },
-    { keys: ["Mod--"], run: () => settings().bumpEditorFontSize(-1) },
-    { keys: ["Mod-0"], run: () => settings().resetEditorFontSize() },
-    { keys: ["Mod-q"], run: () => void getCurrentWindow().close() },
+    { action: "newConnection", run: () => useWorkspaces.getState().setActive("home") },
+    { action: "nextWorkspace", run: () => cycleWorkspace(1) },
+    { action: "prevWorkspace", run: () => cycleWorkspace(-1) },
+    { action: "openSettings", run: () => useWorkspaces.getState().setActive("settings") },
+    { action: "zoomIn", run: () => settings().bumpEditorFontSize(1) },
+    { action: "zoomOut", run: () => settings().bumpEditorFontSize(-1) },
+    { action: "zoomReset", run: () => settings().resetEditorFontSize() },
+    { action: "quit", run: () => void getCurrentWindow().close() },
     // Evita que el webview recargue la página si no hay workspace activo.
     { keys: ["Mod-r", "Mod-Shift-r", "F5"], run: () => {}, enabled: !workspace },
   ]);
@@ -59,6 +63,7 @@ export default function App() {
         {active === "home" && <ConnectionManager />}
         {active === "favorites" && <FavoritesView />}
         {active === "history" && <HistoryView />}
+        {active === "settings" && <SettingsView />}
         {workspace && <WorkspaceView key={workspace.id} workspace={workspace} />}
       </main>
     </div>

@@ -41,9 +41,30 @@ export interface QueryTab {
   id: string;
   title: string;
   sql: string;
-  /** SQL del panel derecho del split (copia independiente); null = sin split. */
-  splitSql: string | null;
+  /**
+   * Panel derecho del split: un sub-tab completo (SQL + resultado propios),
+   * con id `${id}#split`. Todos los métodos que reciben `tabId` aceptan
+   * también ese id, así el grid del split funciona igual que el principal.
+   */
+  split: QueryTab | null;
   result: ResultState;
+}
+
+export const SPLIT_SUFFIX = "#split";
+
+/** Tab (o panel split, por su id) dentro del workspace. */
+export function findTab(ws: Workspace | undefined, tabId: string): QueryTab | undefined {
+  if (!ws) return undefined;
+  for (const t of ws.tabs) {
+    if (t.id === tabId) return t;
+    if (t.split?.id === tabId) return t.split;
+  }
+  return undefined;
+}
+
+/** Todos los paneles (tabs y splits) del workspace. */
+function allPanes(ws: Workspace): QueryTab[] {
+  return ws.tabs.flatMap((t) => (t.split ? [t, t.split] : [t]));
 }
 
 /**
@@ -66,7 +87,7 @@ export function workspaceId(connId: string, database: string): string {
   return `${connId}::${database}`;
 }
 
-export type ActiveView = "home" | "favorites" | "history" | string;
+export type ActiveView = "home" | "favorites" | "history" | "settings" | string;
 
 function emptyResult(): ResultState {
   return {
@@ -93,7 +114,7 @@ function newTab(title?: string, sql = ""): QueryTab {
     id: `tab-${Date.now()}-${tabCounter}`,
     title: title ?? `Query ${tabCounter}`,
     sql,
-    splitSql: null,
+    split: null,
     result: emptyResult(),
   };
 }
@@ -104,6 +125,13 @@ interface WorkspaceState {
   active: ActiveView;
 
   setActive: (view: ActiveView) => void;
+  /**
+   * Pide llevar el foco al editor de la query activa del workspace que quede
+   * visible (p. ej. tras elegir una database con Ctrl+K).
+   */
+  editorFocusRequested: boolean;
+  requestEditorFocus: () => void;
+  consumeEditorFocus: () => void;
   /**
    * Abre (o activa, si ya existe) el workspace de `connId` sobre `database`
    * y devuelve su id. Los demás métodos reciben ese id como `wsId`.
@@ -117,8 +145,8 @@ interface WorkspaceState {
   closeTab: (wsId: string, tabId: string) => void;
   setActiveTab: (wsId: string, tabId: string) => void;
   setTabSql: (wsId: string, tabId: string, sql: string) => void;
-  /** Abre (copiando el SQL actual), actualiza o cierra (null) el split del tab. */
-  setTabSplit: (wsId: string, tabId: string, sql: string | null) => void;
+  /** Abre (copiando el SQL actual) o cierra el split del tab. */
+  setTabSplit: (wsId: string, tabId: string, open: boolean) => void;
 
   runQuery: (
     wsId: string,
@@ -165,7 +193,11 @@ function updateTab(
       ...s.workspaces,
       [wsId]: {
         ...ws,
-        tabs: ws.tabs.map((t) => (t.id === tabId ? fn(t) : t)),
+        tabs: ws.tabs.map((t) => {
+          if (t.id === tabId) return fn(t);
+          if (t.split?.id === tabId) return { ...t, split: fn(t.split) };
+          return t;
+        }),
       },
     },
   };
@@ -175,6 +207,10 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
   workspaces: {},
   order: [],
   active: "home",
+  editorFocusRequested: false,
+
+  requestEditorFocus: () => set({ editorFocusRequested: true }),
+  consumeEditorFocus: () => set({ editorFocusRequested: false }),
 
   setActive: (view) => set({ active: view }),
 
@@ -208,7 +244,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
   closeWorkspace: (wsId) => {
     const closing = get().workspaces[wsId];
     if (!closing) return;
-    for (const t of closing.tabs) {
+    for (const t of allPanes(closing)) {
       if (t.result.queryId) void ipc.cancelQuery(t.result.queryId);
     }
     set((s) => {
@@ -261,7 +297,9 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
   closeTab: (wsId, tabId) => {
     const ws = get().workspaces[wsId];
     const tab = ws?.tabs.find((t) => t.id === tabId);
-    if (tab?.result.queryId) void ipc.cancelQuery(tab.result.queryId);
+    for (const p of tab?.split ? [tab, tab.split] : tab ? [tab] : []) {
+      if (p.result.queryId) void ipc.cancelQuery(p.result.queryId);
+    }
     set((s) => {
       const cur = s.workspaces[wsId];
       if (!cur) return {};
@@ -288,13 +326,22 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
     set((s) => updateTab(s, wsId, tabId, (t) => ({ ...t, sql })));
   },
 
-  setTabSplit: (wsId, tabId, splitSql) => {
-    set((s) => updateTab(s, wsId, tabId, (t) => ({ ...t, splitSql })));
+  setTabSplit: (wsId, tabId, open) => {
+    const tab = findTab(get().workspaces[wsId], tabId);
+    if (!open && tab?.split?.result.queryId) void ipc.cancelQuery(tab.split.result.queryId);
+    set((s) =>
+      updateTab(s, wsId, tabId, (t) => ({
+        ...t,
+        split: open
+          ? { ...newTab(`${t.title} (split)`, t.sql), id: `${t.id}${SPLIT_SUFFIX}` }
+          : null,
+      })),
+    );
   },
 
   runQuery: async (wsId, tabId, confirmDangerous = false, sqlOverride) => {
     const ws = get().workspaces[wsId];
-    const tab = ws?.tabs.find((t) => t.id === tabId);
+    const tab = findTab(ws, tabId);
     if (!ws || !tab) return;
     // Si hay texto seleccionado en el editor se ejecuta solo eso;
     // si no, todo el contenido del tab.
@@ -343,7 +390,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
   },
 
   cancelQuery: async (wsId, tabId) => {
-    const tab = get().workspaces[wsId]?.tabs.find((t) => t.id === tabId);
+    const tab = findTab(get().workspaces[wsId], tabId);
     if (tab?.result.queryId) {
       await ipc.cancelQuery(tab.result.queryId);
       set((s) =>
@@ -356,7 +403,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
   },
 
   fetchMore: async (wsId, tabId) => {
-    const tab = get().workspaces[wsId]?.tabs.find((t) => t.id === tabId);
+    const tab = findTab(get().workspaces[wsId], tabId);
     if (tab?.result.queryId && tab.result.truncated) {
       set((s) =>
         updateTab(s, wsId, tabId, (t) => ({
@@ -372,7 +419,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
     const s = get();
     for (const wsId of s.order) {
       const ws = s.workspaces[wsId];
-      const tab = ws.tabs.find((t) => t.result.queryId === event.queryId);
+      const tab = allPanes(ws).find((t) => t.result.queryId === event.queryId);
       if (!tab) continue;
       set((st) =>
         updateTab(st, wsId, tab.id, (t) => {
@@ -483,7 +530,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
 
   /** Convierte el estado del grid a PendingChange[] para preview/apply. */
   pendingChanges: (wsId, tabId) => {
-    const tab = get().workspaces[wsId]?.tabs.find((t) => t.id === tabId);
+    const tab = findTab(get().workspaces[wsId], tabId);
     if (!tab) return [];
     const { editability, columns, rows, changes, inserts } = tab.result;
     if (!editability?.editable) return [];
