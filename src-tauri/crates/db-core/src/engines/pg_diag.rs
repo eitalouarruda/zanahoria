@@ -22,7 +22,10 @@ pub const NON_UTF8_ERROR: &str = "non-UTF-8 string for its error message";
 /// Intenta obtener el mensaje de error real del servidor. `None` si el
 /// handshake no termina en un ErrorResponse (o no se puede reproducir).
 pub async fn raw_auth_error(cfg: &ConnectionConfig) -> Option<String> {
-    timeout(Duration::from_secs(10), handshake(cfg)).await.ok().flatten()
+    timeout(Duration::from_secs(10), handshake(cfg))
+        .await
+        .ok()
+        .flatten()
 }
 
 async fn handshake(cfg: &ConnectionConfig) -> Option<String> {
@@ -32,7 +35,10 @@ async fn handshake(cfg: &ConnectionConfig) -> Option<String> {
 
     // StartupMessage: protocolo 3.0 + parámetros user/database.
     let mut params = Vec::new();
-    for (k, v) in [("user", cfg.user.as_str()), ("database", cfg.database.as_str())] {
+    for (k, v) in [
+        ("user", cfg.user.as_str()),
+        ("database", cfg.database.as_str()),
+    ] {
         if v.is_empty() {
             continue;
         }
@@ -94,7 +100,10 @@ async fn send_password(stream: &mut TcpStream, password: &[u8]) -> Option<()> {
 }
 
 fn hex_md5(data: &[u8]) -> String {
-    Md5::digest(data).iter().map(|b| format!("{b:02x}")).collect()
+    Md5::digest(data)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// Bytes → String: UTF-8 si es válido, si no Latin-1 (cada byte = U+00XX).

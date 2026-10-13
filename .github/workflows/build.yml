@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Permite lanzar el build a mano desde la pestaña Actions.
+  workflow_dispatch:
+
+# Un push nuevo cancela el build anterior de la misma rama.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -44,7 +51,7 @@ jobs:
 
   build-desktop:
     needs: test
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -56,9 +63,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+      # Sin `version`: usa la de "packageManager" en package.json (pnpm 11).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -267,7 +267,10 @@ async fn pg_pool_por_database() {
         .unwrap();
     assert_eq!(current_db(other.clone()).await, "postgres");
     // El principal sigue en la database original.
-    assert_eq!(current_db(pools.get(&cfg.id).await.unwrap()).await, "zanahoria");
+    assert_eq!(
+        current_db(pools.get(&cfg.id).await.unwrap()).await,
+        "zanahoria"
+    );
     // Segunda vez: reutiliza el mismo pool, sin reconectar.
     let again = pools
         .get_for_database(&cfg.id, "postgres", || panic!("no debe reconectar"))
