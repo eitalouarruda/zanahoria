@@ -17,7 +17,7 @@ jobs:
   test:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -44,7 +44,9 @@ jobs:
       - name: Forbid openssl/native-tls in dependency tree
         run: |
           cd src-tauri
-          if cargo tree -p db-core -e normal | grep -i -E 'openssl|native-tls'; then
+          # openssl-probe (Rust puro, solo localiza certificados) es inofensivo:
+          # se buscan los crates que de verdad enlazan OpenSSL.
+          if cargo tree -p db-core -e normal | grep -E '(^|[^a-z-])(openssl|openssl-sys|native-tls) v'; then
             echo "::error::db-core arrastra openssl/native-tls — rompe la compilación Android"
             exit 1
           fi
@@ -62,7 +64,7 @@ jobs:
             args: ""
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Sin `version`: usa la de "packageManager" en package.json (pnpm 11).
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
