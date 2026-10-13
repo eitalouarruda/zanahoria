@@ -1119,3 +1119,9 @@ kbd.conflict {
   color: var(--yellow);
   font-size: 12px;
 }
+
+/* Error del commit dentro del Code Review. */
+.preview-error {
+  margin: 0;
+  white-space: pre-wrap;
+}

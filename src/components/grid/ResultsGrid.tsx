@@ -22,6 +22,8 @@ export default function ResultsGrid({ wsId, tab }: Props) {
     col: number;
     insert: boolean;
     text: string;
+    /** true: al abrir se selecciona todo el contenido (Enter/F2/doble clic). */
+    selectAll: boolean;
   } | null>(null);
   /** Celda activa (navegación con teclado). */
   const [cursor, setCursor] = useState<{ row: number; col: number } | null>(null);
@@ -68,7 +70,8 @@ export default function ResultsGrid({ wsId, tab }: Props) {
     return rows[rowIndex][colIndex];
   };
 
-  const startEdit = (rowIndex: number, colIndex: number) => {
+  /** `typed`: edición iniciada escribiendo; esa tecla reemplaza el valor. */
+  const startEdit = (rowIndex: number, colIndex: number, typed?: string) => {
     const colName = columns[colIndex].name;
     const insert = rowIndex >= rows.length;
     if (!insert && !isColEditable(colName)) return;
@@ -78,7 +81,8 @@ export default function ResultsGrid({ wsId, tab }: Props) {
       row: rowIndex,
       col: colIndex,
       insert,
-      text: v.t === "null" ? "" : dbValueToDisplay(v),
+      text: typed ?? (v.t === "null" ? "" : dbValueToDisplay(v)),
+      selectAll: typed === undefined,
     });
   };
 
@@ -170,8 +174,7 @@ export default function ResultsGrid({ wsId, tab }: Props) {
           void navigator.clipboard.writeText(dbValueToDisplay(cellValue(cursor.row, cursor.col)));
         } else if (cursor && !mod && !e.altKey && e.key.length === 1) {
           // Escribir sobre la celda empieza a editarla con esa tecla.
-          startEdit(cursor.row, cursor.col);
-          setEditing((ed) => (ed ? { ...ed, text: e.key } : ed));
+          startEdit(cursor.row, cursor.col, e.key);
         } else {
           handled = false;
         }
@@ -270,6 +273,11 @@ export default function ResultsGrid({ wsId, tab }: Props) {
                       {isEditing ? (
                         <input
                           autoFocus
+                          onFocus={(e) => {
+                            const input = e.currentTarget;
+                            if (editing.selectAll) input.select();
+                            else input.setSelectionRange(input.value.length, input.value.length);
+                          }}
                           value={editing.text}
                           onChange={(e) =>
                             setEditing({ ...editing, text: e.target.value })

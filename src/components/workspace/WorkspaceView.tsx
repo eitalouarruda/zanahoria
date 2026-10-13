@@ -52,6 +52,7 @@ export default function WorkspaceView({ workspace }: Props) {
   };
   const [preview, setPreview] = useState<MutationPreview | null>(null);
   const [applying, setApplying] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [favName, setFavName] = useState<string | null>(null);
   const [showBackup, setShowBackup] = useState(false);
@@ -121,6 +122,7 @@ export default function WorkspaceView({ workspace }: Props) {
   useShortcuts([
     { keys: ["Escape"], enabled: modalOpen, run: () => {
       setPreview(null);
+      setPreviewError(null);
       setFavName(null);
       setShowBackup(false);
       setShowDbPicker(false);
@@ -133,8 +135,13 @@ export default function WorkspaceView({ workspace }: Props) {
     { action: "reload", enabled: !!pane && !pane.result.running, run: () =>
       pane && run(pane, false, pane.result.executedSql ?? pane.sql) },
     { action: "previewChanges", enabled: pendingCount > 0, run: () => void showPreview(pane) },
+    // Con el Code Review abierto, Ctrl+S / Ctrl+Enter confirman el commit.
+    { keys: ["Mod-Enter"], enabled: preview !== null && !applying, run: () =>
+      void commit(findTab(workspace, previewPane.current ?? "")) },
+    { action: "commitChanges", enabled: preview !== null && !applying, run: () =>
+      void commit(findTab(workspace, previewPane.current ?? "")) },
     // Commit: en Safe Mode siempre pasa por el preview.
-    { action: "commitChanges", enabled: pendingCount > 0 && !applying, run: () =>
+    { action: "commitChanges", enabled: preview === null && pendingCount > 0 && !applying, run: () =>
       void (config?.safeMode ? showPreview(pane) : commit(pane)) },
     { action: "beautify", enabled: !!pane && engine !== "redis", run: () =>
       pane && ws.setTabSql(wsId, pane.id, beautify(pane.sql, engine)) },
@@ -166,6 +173,7 @@ export default function WorkspaceView({ workspace }: Props) {
   const showPreview = async (target: QueryTab | undefined) => {
     if (!target?.result.editability) return;
     previewPane.current = target.id;
+    setPreviewError(null);
     try {
       const changes = ws.pendingChanges(wsId, target.id);
       if (changes.length === 0) return;
@@ -188,11 +196,15 @@ export default function WorkspaceView({ workspace }: Props) {
         changes,
       );
       setPreview(null);
+      setPreviewError(null);
       ws.discardChanges(wsId, target.id);
       setNotice(t("ws.noticeAffected", { n: result.affectedTotal }));
       void ws.runQuery(wsId, target.id);
     } catch (e) {
-      setNotice(errorMessage(e));
+      // Con el Code Review abierto el error va dentro del diálogo (si no,
+      // quedaría escondido detrás); sin diálogo, en el panel de resultados.
+      if (preview) setPreviewError(errorMessage(e));
+      else setNotice(errorMessage(e));
     } finally {
       setApplying(false);
     }
@@ -462,13 +474,18 @@ export default function WorkspaceView({ workspace }: Props) {
         <CodePreviewModal
           preview={preview}
           applying={applying}
+          error={previewError}
           // El commit aplica sobre el panel cuyo preview está abierto.
           onCommit={() => void commit(findTab(workspace, previewPane.current ?? ""))}
           onDiscard={() => {
             setPreview(null);
+            setPreviewError(null);
             ws.discardChanges(wsId, previewPane.current ?? pane?.id ?? "");
           }}
-          onClose={() => setPreview(null)}
+          onClose={() => {
+            setPreview(null);
+            setPreviewError(null);
+          }}
         />
       )}
 

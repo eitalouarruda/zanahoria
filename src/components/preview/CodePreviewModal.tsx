@@ -4,6 +4,8 @@ import { useT } from "../../i18n";
 interface Props {
   preview: MutationPreview;
   applying: boolean;
+  /** Error del último intento de commit (se muestra dentro del diálogo). */
+  error?: string | null;
   onCommit: () => void;
   onDiscard: () => void;
   onClose: () => void;
@@ -13,6 +15,7 @@ interface Props {
 export default function CodePreviewModal({
   preview,
   applying,
+  error,
   onCommit,
   onDiscard,
   onClose,
@@ -25,6 +28,11 @@ export default function CodePreviewModal({
           {t("preview.title")}{" "}
           {preview.safeMode && <span className="safe-badge">{t("safe.on")}</span>}
         </h3>
+        {error && (
+          <div className="error-banner preview-error" role="alert">
+            {error}
+          </div>
+        )}
         <pre className="preview-sql">
           {preview.statements.map((s) => s.previewSql + ";").join("\n")}
         </pre>
