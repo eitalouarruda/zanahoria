@@ -1,0 +1,42 @@
+[package]
+name = "zanahoria"
+version = "0.1.0"
+description = "Zanahoria — database GUI client"
+authors = ["eitalouarruda"]
+edition = "2021"
+
+[workspace]
+members = ["crates/db-core", "crates/app-store", "crates/backup"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+[lib]
+name = "zanahoria_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util = "0.7"
+uuid = { version = "1", features = ["v4"] }
+db-core = { path = "crates/db-core" }
+app-store = { path = "crates/app-store" }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+backup = { path = "crates/backup" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

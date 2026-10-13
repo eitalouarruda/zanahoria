@@ -1,0 +1,41 @@
+[package]
+name = "db-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+md-5 = "0.10"
+tokio-util = "0.7"
+futures = "0.3"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = "1"
+sqlparser = "0.53"
+
+[dependencies.redis]
+version = "0.27"
+default-features = false
+features = ["tokio-comp", "tls-rustls", "tokio-rustls-comp", "connection-manager"]
+
+[dependencies.sqlx]
+version = "0.8"
+default-features = false
+features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "mysql",
+    "sqlite",
+    "chrono",
+    "uuid",
+    "json",
+    "rust_decimal",
+]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
