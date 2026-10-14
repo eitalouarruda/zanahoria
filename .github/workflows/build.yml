@@ -134,6 +134,26 @@ jobs:
         with:
           args: ${{ matrix.args }}
           releaseId: ${{ needs.release.outputs.release_id }}
+      # linuxdeploy mete las libwayland de Ubuntu 22.04 en el AppImage; chocan
+      # con el Mesa del host (distros recientes) y WebKit aborta con
+      # "Could not create surfaceless EGL display: EGL_BAD_ALLOC". Se quitan y
+      # se usa la del sistema, que siempre existe donde hay Wayland/Mesa.
+      - name: Strip bundled libwayland from AppImage
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          img="src-tauri/target/release/bundle/appimage/Zanahoria_${VERSION}_amd64.AppImage"
+          work="$(mktemp -d)"
+          (cd "$work" && "$GITHUB_WORKSPACE/$img" --appimage-extract >/dev/null)
+          rm -v "$work"/squashfs-root/usr/lib/libwayland-*.so*
+          wget -q -O "$work/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$work/appimagetool"
+          ARCH=x86_64 "$work/appimagetool" --appimage-extract-and-run "$work/squashfs-root" "$img"
+          gh release upload "v${VERSION}" "$img" --clobber --repo "${{ github.repository }}"
 
   # Publica la release solo si los dos builds terminaron bien.
   publish:
