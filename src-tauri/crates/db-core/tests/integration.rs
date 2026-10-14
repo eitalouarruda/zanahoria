@@ -23,6 +23,7 @@ fn pg_config() -> Option<ConnectionConfig> {
         use_tls: false,
         safe_mode: true,
         color: None,
+        group: None,
     })
 }
 
@@ -193,6 +194,7 @@ async fn mysql_end_to_end() {
         use_tls: false,
         safe_mode: false,
         color: None,
+        group: None,
     };
     let handle = EngineHandle::connect(&cfg, 2).await.expect("connect");
     handle.ping().await.expect("ping");
@@ -232,6 +234,7 @@ async fn redis_end_to_end() {
         use_tls: false,
         safe_mode: false,
         color: None,
+        group: None,
     };
     let handle = EngineHandle::connect(&cfg, 1).await.expect("connect");
     handle.ping().await.expect("ping");

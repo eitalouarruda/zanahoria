@@ -22,11 +22,21 @@ const DEFAULT_PORTS: Record<Engine, number | null> = {
 
 interface Props {
   initial: ConnectionConfig | null;
+  /** Grupo preseleccionado para una conexión nueva. */
+  defaultGroup?: string | null;
+  /** Grupos existentes, sugeridos en el campo "Grupo". */
+  groups: string[];
   onSave: (config: ConnectionConfig) => Promise<void>;
   onCancel: () => void;
 }
 
-export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
+export default function ConnectionForm({
+  initial,
+  defaultGroup = null,
+  groups,
+  onSave,
+  onCancel,
+}: Props) {
   const [config, setConfig] = useState<ConnectionConfig>(
     initial ?? {
       id: crypto.randomUUID(),
@@ -40,6 +50,7 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
       useTls: false,
       safeMode: true,
       color: null,
+      group: defaultGroup,
     },
   );
   const t = useT();
@@ -73,6 +84,20 @@ export default function ConnectionForm({ initial, onSave, onCancel }: Props) {
       <label>
         {t("form.name")}
         <input value={config.name} onChange={(e) => set("name", e.target.value)} />
+      </label>
+      <label>
+        {t("form.group")}
+        <input
+          list="connection-groups"
+          value={config.group ?? ""}
+          onChange={(e) => set("group", e.target.value)}
+          placeholder={t("form.groupPlaceholder")}
+        />
+        <datalist id="connection-groups">
+          {groups.map((g) => (
+            <option key={g} value={g} />
+          ))}
+        </datalist>
       </label>
       <label>
         {t("form.engine")}

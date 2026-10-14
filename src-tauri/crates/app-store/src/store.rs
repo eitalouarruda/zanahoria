@@ -366,6 +366,7 @@ mod tests {
             use_tls: false,
             safe_mode: true,
             color: None,
+            group: None,
         }
     }
 
@@ -385,6 +386,21 @@ mod tests {
 
         store.delete_connection("c1").unwrap();
         assert!(store.list_connections().unwrap().is_empty());
+    }
+
+    #[test]
+    fn connection_group_persists() {
+        let (_dir, store) = store();
+        store.save_connection(config("c1")).unwrap();
+        assert_eq!(store.list_connections().unwrap()[0].config.group, None);
+
+        let mut grouped = config("c1");
+        grouped.group = Some("Prod".into());
+        store.save_connection(grouped).unwrap();
+        assert_eq!(
+            store.list_connections().unwrap()[0].config.group.as_deref(),
+            Some("Prod")
+        );
     }
 
     #[test]

@@ -56,4 +56,7 @@ pub struct ConnectionConfig {
     pub safe_mode: bool,
     #[serde(default)]
     pub color: Option<String>,
+    /// Grupo (carpeta) en la lista de conexiones; None = sin grupo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }

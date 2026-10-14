@@ -14,6 +14,8 @@ export interface ConnectionConfig {
   useTls: boolean;
   safeMode: boolean;
   color?: string | null;
+  /** Grupo en la lista de conexiones; null/ausente = sin grupo. */
+  group?: string | null;
 }
 
 export interface SavedConnection extends ConnectionConfig {
