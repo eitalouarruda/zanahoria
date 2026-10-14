@@ -136,10 +136,13 @@ and <kbd>PgUp</kbd>/<kbd>PgDn</kbd> move between cells, <kbd>Enter</kbd> or
 
 ## Download
 
-Installers for **Linux** (`.deb`, `.AppImage`) and **Windows** (`.msi`, `.exe`)
-are built automatically by GitHub Actions on every push to `main`. Open the
-latest run in the [Actions tab](../../actions), and download them from the
-**Artifacts** section.
+Get the latest installers from the [Releases page](../../releases):
+
+- **Linux:** `Zanahoria_<version>_amd64.AppImage` — make it executable
+  (`chmod +x`) and run it.
+- **Windows:** `Zanahoria_<version>_x64-setup.exe` (or the `.msi`).
+
+A new release is published automatically on every push to `main`.
 
 ## Building from source
 
