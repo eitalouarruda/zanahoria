@@ -75,10 +75,13 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           # Borrador hasta que todos los instaladores estén subidos.
-          gh release create "v$VERSION" --draft --target "$GITHUB_SHA" \
-            --title "Zanahoria v$VERSION" --generate-notes
-          id=$(gh api "repos/${{ github.repository }}/releases" \
-            --jq ".[] | select(.tag_name == \"v$VERSION\") | .id")
+          # El id sale de la misma respuesta: listar las releases justo
+          # después de crearla puede no incluirla todavía.
+          id=$(gh api -X POST "repos/${{ github.repository }}/releases" \
+            -f tag_name="v$VERSION" -f target_commitish="$GITHUB_SHA" \
+            -f name="Zanahoria v$VERSION" -F draft=true \
+            -F generate_release_notes=true --jq .id)
+          test -n "$id"
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
   build-desktop:
