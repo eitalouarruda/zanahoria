@@ -118,7 +118,7 @@ defaults:
 | Re-run last query | <kbd>Ctrl</kbd>+<kbd>R</kbd> / <kbd>F5</kbd> |
 | Open another database | <kbd>Ctrl</kbd>+<kbd>K</kbd> |
 | Next / previous open database | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>]</kbd> / <kbd>[</kbd> |
-| Close and disconnect current database | <kbd>Ctrl</kbd>+<kbd>Esc</kbd> |
+| Close and disconnect current database | <kbd>Ctrl</kbd>+<kbd>Esc</kbd> (or <kbd>Ctrl</kbd>+<kbd>W</kbd> with no tabs open) |
 | New / close query tab | <kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> |
 | Next / previous query tab | <kbd>Ctrl</kbd>+<kbd>Tab</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd> |
 | Split / unsplit editor | <kbd>Ctrl</kbd>+<kbd>\\</kbd> |
@@ -143,6 +143,10 @@ Get the latest installers from the [Releases page](../../releases):
 - **Windows:** `Zanahoria_<version>_x64-setup.exe` (or the `.msi`).
 
 A new release is published automatically on every push to `main`.
+
+**Updates.** When Zanahoria starts it checks the latest GitHub release and, if
+there's a newer one, asks before installing it. The AppImage replaces itself
+and restarts; on Windows the installer runs in passive mode.
 
 ## Building from source
 

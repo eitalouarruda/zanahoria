@@ -54,6 +54,7 @@ export const pt: Record<MessageKey, string> = {
   "form.user": "Usuário",
   "form.password": "Senha",
   "form.passwordUnchanged": "(sem alterações)",
+  "form.noPassword": "Sem senha",
   "form.database": "Database",
   "form.redisDbHint": "(número, ex.: 0)",
   "form.useTls": "Usar TLS",
@@ -68,6 +69,8 @@ export const pt: Record<MessageKey, string> = {
   "schema.refresh": "Atualizar schema",
   "schema.browseHint": "Duplo clique: ver dados",
 
+  "ws.confirmCloseTab": "Esta aba tem {n} alteração(ões) não aplicada(s). Fechar e descartá-las?",
+  "ws.confirmCloseWorkspace": "Há {n} alteração(ões) não aplicada(s). Fechar a conexão e descartá-las?",
   "ws.openDatabase": "Abrir database ({keys})",
   "ws.backup": "⛁ Backup",
   "ws.backupTitle": "Backup e restore",
@@ -186,7 +189,7 @@ export const pt: Record<MessageKey, string> = {
   "action.zoomOut": "Diminuir fonte do editor",
   "action.zoomReset": "Restaurar fonte do editor",
   "action.newTab": "Nova aba de query",
-  "action.closeTab": "Fechar aba de query",
+  "action.closeTab": "Fechar aba de query (sem abas: fechar a conexão)",
   "action.nextTab": "Próxima aba de query",
   "action.prevTab": "Aba de query anterior",
   "action.runCurrent": "Executar seleção ou statement atual",
@@ -201,4 +204,16 @@ export const pt: Record<MessageKey, string> = {
   "action.focusRightPane": "Ir para o painel direito (split)",
   "action.previewChanges": "Ver alterações pendentes como SQL",
   "action.commitChanges": "Aplicar alterações pendentes",
+
+  // Updates
+  "update.title": "Zanahoria {version} está disponível",
+  "update.body": "Baixar e instalar agora? O Zanahoria vai reiniciar ao terminar.",
+  "update.later": "Agora não",
+  "update.install": "Atualizar",
+  "update.downloading": "Baixando… {percent} %",
+  "update.restarting": "Reiniciando…",
+  "update.none": "Não há nenhuma atualização para instalar",
+  "update.notAppImage": "Só a AppImage pode se atualizar sozinha",
+  "update.notWritable": "Não é possível gravar na pasta onde o Zanahoria está",
+  "update.incomplete": "O download foi interrompido",
 };

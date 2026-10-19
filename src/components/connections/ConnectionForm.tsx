@@ -26,6 +26,8 @@ interface Props {
   defaultGroup?: string | null;
   /** Grupos existentes, sugeridos en el campo "Grupo". */
   groups: string[];
+  /** Al editar: si la conexión tiene una password guardada. */
+  hasPassword?: boolean;
   onSave: (config: ConnectionConfig) => Promise<void>;
   onCancel: () => void;
 }
@@ -34,6 +36,7 @@ export default function ConnectionForm({
   initial,
   defaultGroup = null,
   groups,
+  hasPassword = false,
   onSave,
   onCancel,
 }: Props) {
@@ -56,6 +59,9 @@ export default function ConnectionForm({
   const t = useT();
   const [testResult, setTestResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Hay servidores sin password: se guarda vacía a propósito. Al editar, el
+  // campo vacío sin esta casilla significa "sin cambios".
+  const [noPassword, setNoPassword] = useState(initial !== null && !hasPassword);
 
   const set = <K extends keyof ConnectionConfig>(key: K, value: ConnectionConfig[K]) =>
     setConfig((c) => ({ ...c, [key]: value }));
@@ -65,11 +71,19 @@ export default function ConnectionForm({
 
   const isFile = config.engine === "sqlite";
 
+  /** Config a enviar: password vacía = sin password; ausente = la guardada. */
+  const payload = (): ConnectionConfig => {
+    const c = { ...config };
+    if (noPassword) c.password = "";
+    else if (initial && !c.password) delete c.password;
+    return c;
+  };
+
   const test = async () => {
     setBusy(true);
     setTestResult(null);
     try {
-      await ipc.testConnection(config);
+      await ipc.testConnection(payload());
       setTestResult(t("form.testOk"));
     } catch (e) {
       setTestResult(`✗ ${errorMessage(e)}`);
@@ -158,10 +172,19 @@ export default function ConnectionForm({
               {t("form.password")}
               <input
                 type="password"
-                value={config.password ?? ""}
+                value={noPassword ? "" : (config.password ?? "")}
                 onChange={(e) => set("password", e.target.value)}
-                placeholder={initial ? t("form.passwordUnchanged") : ""}
+                placeholder={initial && hasPassword ? t("form.passwordUnchanged") : ""}
+                disabled={noPassword}
               />
+            </label>
+            <label className="checkbox no-password">
+              <input
+                type="checkbox"
+                checked={noPassword}
+                onChange={(e) => setNoPassword(e.target.checked)}
+              />
+              {t("form.noPassword")}
             </label>
           </div>
           <label>
@@ -204,11 +227,7 @@ export default function ConnectionForm({
         <button
           className="primary"
           disabled={!config.name || busy}
-          onClick={() => {
-            const toSave = { ...config };
-            if (initial && !toSave.password) delete toSave.password;
-            void onSave(toSave);
-          }}
+          onClick={() => void onSave(payload())}
         >
           {t("common.save")}
         </button>

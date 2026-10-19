@@ -1,10 +1,12 @@
 mod commands;
 mod error;
 mod state;
+#[cfg(desktop)]
+mod update;
 
 use tauri::Manager;
 
-use commands::{backup_cmd, connections, mutations, platform, query, schema, storage};
+use commands::{backup_cmd, connections, mutations, platform, query, schema, storage, update_cmd};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,6 +17,8 @@ pub fn run() {
             let store = app_store::AppStore::open(&data_dir)
                 .map_err(|e| format!("failed to open app store: {e}"))?;
             app.manage(state::AppState::new(store));
+            #[cfg(desktop)]
+            app.manage(update_cmd::UpdateState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -48,6 +52,8 @@ pub fn run() {
             backup_cmd::start_backup,
             backup_cmd::start_restore,
             backup_cmd::cancel_job,
+            update_cmd::check_update,
+            update_cmd::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

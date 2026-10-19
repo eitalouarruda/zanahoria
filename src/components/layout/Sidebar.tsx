@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useConnections } from "../../stores/connectionsStore";
-import { useWorkspaces } from "../../stores/workspaceStore";
+import { useWorkspaces, workspacePending } from "../../stores/workspaceStore";
 import ContextMenu from "./ContextMenu";
 import { useT } from "../../i18n";
 
@@ -19,6 +19,13 @@ export default function Sidebar() {
   const { workspaces, order, active, setActive, closeWorkspace } = useWorkspaces();
   const [menu, setMenu] = useState<{ wsId: string; x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+
+  /** Cierra los workspaces, confirmando antes si alguno tiene cambios sin aplicar. */
+  const closeAll = (ids: string[]) => {
+    const n = ids.reduce((sum, id) => sum + workspacePending(workspaces[id]), 0);
+    if (n > 0 && !window.confirm(t("ws.confirmCloseWorkspace", { n }))) return;
+    ids.forEach(closeWorkspace);
+  };
 
   return (
     <aside className="sidebar">
@@ -87,13 +94,12 @@ export default function Sidebar() {
             {
               label: t("menu.close"),
               danger: true,
-              onSelect: () => closeWorkspace(menu.wsId),
+              onSelect: () => closeAll([menu.wsId]),
             },
             {
               label: t("menu.closeOthers"),
               disabled: order.length < 2,
-              onSelect: () =>
-                order.filter((id) => id !== menu.wsId).forEach((id) => closeWorkspace(id)),
+              onSelect: () => closeAll(order.filter((id) => id !== menu.wsId)),
             },
           ]}
         />

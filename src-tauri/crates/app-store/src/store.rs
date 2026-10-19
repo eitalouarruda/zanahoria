@@ -121,10 +121,14 @@ impl AppStore {
     // ---- Conexiones -------------------------------------------------------
 
     /// Guarda (upsert) la conexión. El password se separa hacia el
-    /// SecretStore y nunca toca el SQLite.
+    /// SecretStore y nunca toca el SQLite. `None` conserva el guardado; vacío
+    /// lo borra: hay servidores sin password (y el keyring nativo de Linux no
+    /// acepta secretos vacíos).
     pub fn save_connection(&self, mut config: ConnectionConfig) -> Result<()> {
-        if let Some(password) = config.password.take() {
-            self.secrets.set(&config.id, &password)?;
+        match config.password.take() {
+            Some(password) if password.is_empty() => self.secrets.delete(&config.id)?,
+            Some(password) => self.secrets.set(&config.id, &password)?,
+            None => {}
         }
         let json = serde_json::to_string(&config).map_err(|e| StoreError::Other(e.to_string()))?;
         self.lock().execute(
@@ -143,7 +147,7 @@ impl AppStore {
         for row in rows {
             let config: ConnectionConfig =
                 serde_json::from_str(&row?).map_err(|e| StoreError::Other(e.to_string()))?;
-            let has_password = self.secrets.get(&config.id).ok().flatten().is_some();
+            let has_password = self.saved_password(&config.id).ok().flatten().is_some();
             out.push(SavedConnection {
                 config,
                 has_password,
@@ -166,13 +170,13 @@ impl AppStore {
             &json.ok_or_else(|| StoreError::Other(format!("connection {conn_id} not found")))?,
         )
         .map_err(|e| StoreError::Other(e.to_string()))?;
-        config.password = self.secrets.get(conn_id)?;
+        config.password = self.saved_password(conn_id)?;
         Ok(config)
     }
 
     /// Password guardada de una conexión (None si no existe o no tiene).
     pub fn saved_password(&self, conn_id: &str) -> Result<Option<String>> {
-        self.secrets.get(conn_id)
+        Ok(self.secrets.get(conn_id)?.filter(|pw| !pw.is_empty()))
     }
 
     pub fn delete_connection(&self, conn_id: &str) -> Result<()> {
@@ -386,6 +390,31 @@ mod tests {
 
         store.delete_connection("c1").unwrap();
         assert!(store.list_connections().unwrap().is_empty());
+    }
+
+    #[test]
+    fn empty_password_clears_saved_one() {
+        let (_dir, store) = store();
+        store.save_connection(config("c1")).unwrap();
+
+        // Sin password: se conserva la guardada.
+        store
+            .save_connection(ConnectionConfig {
+                password: None,
+                ..config("c1")
+            })
+            .unwrap();
+        assert!(store.list_connections().unwrap()[0].has_password);
+
+        // Vacía: la conexión queda sin password.
+        store
+            .save_connection(ConnectionConfig {
+                password: Some(String::new()),
+                ..config("c1")
+            })
+            .unwrap();
+        assert!(!store.list_connections().unwrap()[0].has_password);
+        assert_eq!(store.connection_for_connect("c1").unwrap().password, None);
     }
 
     #[test]

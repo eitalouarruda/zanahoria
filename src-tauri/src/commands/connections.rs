@@ -32,17 +32,18 @@ pub async fn delete_connection(state: State<'_, AppState>, conn_id: String) -> C
 }
 
 /// Prueba la conexión sin registrarla en el pool manager. Al editar una
-/// conexión existente el formulario no recibe la password guardada; si llega
-/// vacía se usa la del keyring, igual que hace `save_connection`.
+/// conexión existente el formulario no recibe la password guardada: sin
+/// password (`None`) se usa la del keyring, igual que hace `save_connection`;
+/// vacía es "sin password".
 #[tauri::command]
 pub async fn test_connection(
     state: State<'_, AppState>,
     mut config: ConnectionConfig,
 ) -> CmdResult<()> {
-    if config.password.as_deref().unwrap_or("").is_empty() {
-        if let Some(saved) = state.store.saved_password(&config.id)? {
-            config.password = Some(saved);
-        }
+    match config.password.as_deref() {
+        None => config.password = state.store.saved_password(&config.id)?,
+        Some("") => config.password = None,
+        Some(_) => {}
     }
     let handle = EngineHandle::connect(&config, 1).await?;
     handle.ping().await?;

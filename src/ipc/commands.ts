@@ -80,6 +80,9 @@ export const ipc = {
     invoke<void>("kv_set", { table, key, value }),
   getPlatformCapabilities: () =>
     invoke<PlatformCapabilities>("get_platform_capabilities"),
+
+  checkUpdate: () => invoke<{ version: string } | null>("check_update"),
+  installUpdate: () => invoke<void>("install_update"),
 };
 
 export function errorMessage(e: unknown): string {

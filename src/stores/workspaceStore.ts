@@ -67,6 +67,21 @@ function allPanes(ws: Workspace): QueryTab[] {
   return ws.tabs.flatMap((t) => (t.split ? [t, t.split] : [t]));
 }
 
+/** Cambios del grid sin aplicar (filas editadas o borradas + filas nuevas). */
+export function pendingOf(p: QueryTab | undefined): number {
+  return p ? Object.keys(p.result.changes).length + p.result.inserts.length : 0;
+}
+
+/** Cambios sin aplicar de un tab, contando su split. */
+export function tabPending(tab: QueryTab): number {
+  return pendingOf(tab) + pendingOf(tab.split ?? undefined);
+}
+
+/** Cambios sin aplicar de todo el workspace. */
+export function workspacePending(ws: Workspace | undefined): number {
+  return ws ? allPanes(ws).reduce((n, p) => n + pendingOf(p), 0) : 0;
+}
+
 /**
  * Una entrada del rail: una conexión abierta sobre una database concreta.
  * La misma conexión puede tener varios workspaces (uno por database, Ctrl+K);

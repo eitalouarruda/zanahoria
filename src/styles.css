@@ -364,6 +364,15 @@ select:focus {
   color: var(--fg);
 }
 
+/* "Sin contraseña": al lado del campo, alineada con los inputs. */
+.connection-form .form-row label.no-password {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  align-items: center;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+
 .safe-mode-option {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -809,6 +818,19 @@ select:focus {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.update-dialog {
+  max-width: 480px;
+}
+
+.update-dialog p {
+  margin: 0;
+}
+
+.update-dialog progress {
+  width: 100%;
+  accent-color: var(--accent);
 }
 
 .preview-sql {

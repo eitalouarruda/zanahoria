@@ -7,6 +7,7 @@ import WorkspaceView from "./components/workspace/WorkspaceView";
 import FavoritesView from "./components/favorites/FavoritesView";
 import HistoryView from "./components/history/HistoryView";
 import SettingsView from "./components/settings/SettingsView";
+import UpdateDialog from "./components/update/UpdateDialog";
 import { useConnections } from "./stores/connectionsStore";
 import { useSettings } from "./stores/settingsStore";
 import { useWorkspaces } from "./stores/workspaceStore";
@@ -66,6 +67,7 @@ export default function App() {
         {active === "settings" && <SettingsView />}
         {workspace && <WorkspaceView key={workspace.id} workspace={workspace} />}
       </main>
+      <UpdateDialog />
     </div>
   );
 }

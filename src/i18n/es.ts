@@ -54,6 +54,7 @@ export const es: Record<MessageKey, string> = {
   "form.user": "Usuario",
   "form.password": "Password",
   "form.passwordUnchanged": "(sin cambios)",
+  "form.noPassword": "Sin contraseña",
   "form.database": "Database",
   "form.redisDbHint": "(número, ej: 0)",
   "form.useTls": "Usar TLS",
@@ -68,6 +69,8 @@ export const es: Record<MessageKey, string> = {
   "schema.refresh": "Refrescar schema",
   "schema.browseHint": "Doble clic: ver datos",
 
+  "ws.confirmCloseTab": "Este tab tiene {n} cambio(s) sin aplicar. ¿Cerrarlo y descartarlos?",
+  "ws.confirmCloseWorkspace": "Hay {n} cambio(s) sin aplicar. ¿Cerrar la conexión y descartarlos?",
   "ws.openDatabase": "Abrir database ({keys})",
   "ws.backup": "⛁ Backup",
   "ws.backupTitle": "Respaldos y restore",
@@ -186,7 +189,7 @@ export const es: Record<MessageKey, string> = {
   "action.zoomOut": "Reducir letra del editor",
   "action.zoomReset": "Restablecer letra del editor",
   "action.newTab": "Nuevo tab de query",
-  "action.closeTab": "Cerrar tab de query",
+  "action.closeTab": "Cerrar tab de query (sin tabs: cerrar la conexión)",
   "action.nextTab": "Siguiente tab de query",
   "action.prevTab": "Tab de query anterior",
   "action.runCurrent": "Ejecutar selección o statement actual",
@@ -201,4 +204,16 @@ export const es: Record<MessageKey, string> = {
   "action.focusRightPane": "Ir al panel derecho (split)",
   "action.previewChanges": "Ver cambios pendientes como SQL",
   "action.commitChanges": "Aplicar cambios pendientes",
+
+  // Updates
+  "update.title": "Zanahoria {version} está disponible",
+  "update.body": "¿Descargarla e instalarla ahora? Zanahoria se reiniciará al terminar.",
+  "update.later": "Ahora no",
+  "update.install": "Actualizar",
+  "update.downloading": "Descargando… {percent} %",
+  "update.restarting": "Reiniciando…",
+  "update.none": "No hay ninguna actualización para instalar",
+  "update.notAppImage": "Solo la AppImage se puede actualizar sola",
+  "update.notWritable": "No se puede escribir en la carpeta donde está Zanahoria",
+  "update.incomplete": "La descarga se cortó",
 };

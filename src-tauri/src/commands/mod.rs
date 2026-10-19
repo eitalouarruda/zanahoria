@@ -5,3 +5,4 @@ pub mod platform;
 pub mod query;
 pub mod schema;
 pub mod storage;
+pub mod update_cmd;

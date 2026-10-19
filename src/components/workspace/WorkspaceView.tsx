@@ -3,7 +3,10 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useConnections } from "../../stores/connectionsStore";
 import {
   findTab,
+  pendingOf,
+  tabPending,
   useWorkspaces,
+  workspacePending,
   type QueryTab,
   type Workspace,
 } from "../../stores/workspaceStore";
@@ -91,8 +94,6 @@ export default function WorkspaceView({ workspace }: Props) {
       .catch(() => {});
   }, []);
 
-  const pendingOf = (p: QueryTab | undefined) =>
-    p ? Object.keys(p.result.changes).length + p.result.inserts.length : 0;
   const pendingCount = pendingOf(pane);
 
   /** Tab anterior/siguiente (circular). */
@@ -128,7 +129,11 @@ export default function WorkspaceView({ workspace }: Props) {
       setShowDbPicker(false);
     } },
     { action: "newTab", run: () => ws.addTab(wsId) },
-    { action: "closeTab", enabled: !!tab, run: () => tab && ws.closeTab(wsId, tab.id) },
+    // Sin tabs abiertos, Ctrl+W cierra la conexión (como Ctrl+Esc).
+    { action: "closeTab", run: () => {
+      if (tab) closeTab(tab);
+      else closeWorkspace();
+    } },
     { action: "nextTab", run: () => cycleTab(1) },
     { action: "prevTab", run: () => cycleTab(-1) },
     // Reload: repite la última query ejecutada del panel (o todo su editor).
@@ -154,8 +159,22 @@ export default function WorkspaceView({ workspace }: Props) {
     { action: "focusLeftPane", enabled: !!tab?.split, run: () => focusPane(false) },
     { action: "focusRightPane", enabled: !!tab?.split, run: () => focusPane(true) },
     // "Logout": cierra el workspace y desconecta.
-    { action: "closeWorkspace", run: () => ws.closeWorkspace(wsId) },
+    { action: "closeWorkspace", run: () => closeWorkspace() },
   ]);
+
+  /** Cierra el tab, confirmando si tiene cambios sin aplicar. */
+  function closeTab(target: QueryTab) {
+    const n = tabPending(target);
+    if (n > 0 && !window.confirm(t("ws.confirmCloseTab", { n }))) return;
+    ws.closeTab(wsId, target.id);
+  }
+
+  /** Cierra el workspace y desconecta, confirmando si hay cambios sin aplicar. */
+  function closeWorkspace() {
+    const n = workspacePending(useWorkspaces.getState().workspaces[wsId]);
+    if (n > 0 && !window.confirm(t("ws.confirmCloseWorkspace", { n }))) return;
+    ws.closeWorkspace(wsId);
+  }
 
   const browseTable = (namespace: string | null, table: string) => {
     const q = (id: string) =>
@@ -377,7 +396,7 @@ export default function WorkspaceView({ workspace }: Props) {
                 className="tab-close"
                 onClick={(e) => {
                   e.stopPropagation();
-                  ws.closeTab(wsId, t.id);
+                  closeTab(t);
                 }}
               >
                 ×

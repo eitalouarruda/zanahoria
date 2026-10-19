@@ -32,7 +32,7 @@ export default function ConnectionManager() {
   } = useConnections();
   const { openWorkspace } = useWorkspaces();
   const [editing, setEditing] = useState<
-    { config: ConnectionConfig | null; group: string | null } | null
+    { config: ConnectionConfig | null; group: string | null; hasPassword?: boolean } | null
   >(null);
   const [failure, setFailure] = useState<string | null>(null);
   // Input inline para crear (key "") o renombrar (key = nombre actual) un grupo.
@@ -103,6 +103,7 @@ export default function ConnectionManager() {
         <ConnectionForm
           initial={editing.config}
           defaultGroup={editing.group}
+          hasPassword={editing.hasPassword}
           groups={groups}
           onSave={async (config) => {
             await save(config);
@@ -153,7 +154,11 @@ export default function ConnectionManager() {
           {statuses[conn.id] === "connecting" ? t("conn.connecting") : t("conn.connect")}
         </button>
         <button
-          onClick={() => setEditing({ config: { ...conn, password: "" }, group: null })}
+          onClick={() => setEditing({
+              config: { ...conn, password: "" },
+              group: null,
+              hasPassword: conn.hasPassword,
+            })}
         >
           {t("common.edit")}
         </button>

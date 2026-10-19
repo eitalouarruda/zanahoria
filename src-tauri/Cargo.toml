@@ -35,6 +35,7 @@ app-store = { path = "crates/app-store" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 backup = { path = "crates/backup" }
+ureq = "3"
 
 [profile.release]
 lto = true

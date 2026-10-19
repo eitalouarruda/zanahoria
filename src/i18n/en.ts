@@ -57,6 +57,7 @@ export const en = {
   "form.user": "User",
   "form.password": "Password",
   "form.passwordUnchanged": "(unchanged)",
+  "form.noPassword": "No password",
   "form.database": "Database",
   "form.redisDbHint": "(number, e.g. 0)",
   "form.useTls": "Use TLS",
@@ -73,6 +74,8 @@ export const en = {
   "schema.browseHint": "Double-click: browse data",
 
   // Workspace
+  "ws.confirmCloseTab": "This tab has {n} unapplied change(s). Close it and discard them?",
+  "ws.confirmCloseWorkspace": "There are {n} unapplied change(s). Close the connection and discard them?",
   "ws.openDatabase": "Open database ({keys})",
   "ws.backup": "⛁ Backup",
   "ws.backupTitle": "Backup and restore",
@@ -198,7 +201,7 @@ export const en = {
   "action.zoomOut": "Decrease editor font size",
   "action.zoomReset": "Reset editor font size",
   "action.newTab": "New query tab",
-  "action.closeTab": "Close query tab",
+  "action.closeTab": "Close query tab (no tabs left: close the connection)",
   "action.nextTab": "Next query tab",
   "action.prevTab": "Previous query tab",
   "action.runCurrent": "Run selection or current statement",
@@ -213,6 +216,18 @@ export const en = {
   "action.focusRightPane": "Focus right pane (split)",
   "action.previewChanges": "Preview pending changes as SQL",
   "action.commitChanges": "Commit pending changes",
+
+  // Updates
+  "update.title": "Zanahoria {version} is available",
+  "update.body": "Download and install it now? Zanahoria will restart when it's done.",
+  "update.later": "Not now",
+  "update.install": "Update",
+  "update.downloading": "Downloading… {percent} %",
+  "update.restarting": "Restarting…",
+  "update.none": "There's no update to install",
+  "update.notAppImage": "Only the AppImage can update itself",
+  "update.notWritable": "Can't write to the folder where Zanahoria is",
+  "update.incomplete": "The download was interrupted",
 };
 
 export type MessageKey = keyof typeof en;
