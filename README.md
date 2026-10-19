@@ -43,6 +43,10 @@ transaction, and almost everything can be done from the keyboard.
   current-statement highlighting, search and replace, and formatting.
 - **Editable results grid.** Navigate with the arrow keys, edit cells in place,
   add or delete rows, load more rows on demand and export to CSV, JSON or SQL.
+- **Column filter.** On wide results, click **Filter columns** in the bar
+  above the grid and type part of a field name: only the columns whose name
+  contains it stay visible (partial, case-insensitive match, like
+  `ILIKE '%text%'`). Rows are not filtered.
 - **Customizable shortcuts, themes and languages.** Rebind any shortcut, choose
   a dark or light theme, and use the app in English, Português or Español.
 - **Backup and restore.** Run `pg_dump`/`pg_restore`/`mysqldump` from the app,
@@ -98,9 +102,12 @@ toolbar and shortcuts act on.
 4. **Edit data.** Double-click a cell (or select it and press
    <kbd>Enter</kbd>), change the value, then review and commit with
    <kbd>Ctrl</kbd>+<kbd>S</kbd>. Use **+ Row** to insert and **−** to delete.
-5. **Open more databases.** Press <kbd>Ctrl</kbd>+<kbd>K</kbd>, type to filter
+5. **Find a column.** Click **Filter columns** in the bar between the editor
+   and the results, and type part of the field name; <kbd>Esc</kbd> closes the
+   filter and shows every column again.
+6. **Open more databases.** Press <kbd>Ctrl</kbd>+<kbd>K</kbd>, type to filter
    and press <kbd>Enter</kbd>. Right-click an entry in the sidebar to close it.
-6. **Save favorites.** Click **★ Favorite** to save the current query; find it
+7. **Save favorites.** Click **★ Favorite** to save the current query; find it
    later under the star in the sidebar.
 
 On macOS use <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.

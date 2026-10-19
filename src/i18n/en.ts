@@ -115,6 +115,10 @@ export const en = {
   "grid.removeNewRow": "Remove new row",
   "grid.restoreRow": "Restore row",
   "grid.markDelete": "Mark for deletion",
+  "grid.filterColumns": "Filter columns",
+  "grid.filterColumnsTitle": "Show only the columns whose name contains the text (case-insensitive)",
+  "grid.columnFilterPlaceholder": "Field name…",
+  "grid.columnsShown": "{n} of {total} columns",
 
   // Database picker
   "picker.filter": "Filter databases…",

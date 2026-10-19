@@ -80,6 +80,15 @@ export default function WorkspaceView({ workspace }: Props) {
     requestAnimationFrame(() => editorApi.current?.focus());
   }, [focusRequested, workspace.id]);
   const [showDbPicker, setShowDbPicker] = useState(false);
+  /** Filtro de columnas por panel (id del panel → texto; ausente = cerrado). */
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const setColumnFilter = (paneId: string, text: string | null) =>
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      if (text === null) delete next[paneId];
+      else next[paneId] = text;
+      return next;
+    });
 
   /** Ejecuta en el panel: la selección de su editor si la hay; si no, todo su texto. */
   const run = (p: QueryTab, confirmDangerous = false, selection?: string) => {
@@ -260,6 +269,13 @@ export default function WorkspaceView({ workspace }: Props) {
   const renderColumn = (p: QueryTab, isSplit: boolean) => {
     const pending = pendingOf(p);
     const focused = !!tab?.split && focusedSplit === isSplit;
+    const columnFilter = columnFilters[p.id];
+    const filterOpen = columnFilter !== undefined;
+    const shownColumns = filterOpen
+      ? p.result.columns.filter((c) =>
+          c.name.toLowerCase().includes(columnFilter.trim().toLowerCase()),
+        ).length
+      : p.result.columns.length;
     return (
       <div
         className={`query-column ${focused ? "focused" : ""}`}
@@ -282,6 +298,42 @@ export default function WorkspaceView({ workspace }: Props) {
           <PanelResizeHandle className="resize-handle horizontal" />
           <Panel minSize={20}>
             <div className="results-pane">
+              {/* Barra de comandos del resultado (entre el editor y el grid). */}
+              <div className="results-toolbar">
+                <button
+                  className={filterOpen ? "active" : undefined}
+                  disabled={p.result.columns.length === 0 && !filterOpen}
+                  onClick={() => setColumnFilter(p.id, filterOpen ? null : "")}
+                  title={t("grid.filterColumnsTitle")}
+                >
+                  {t("grid.filterColumns")}
+                </button>
+                {filterOpen && (
+                  <>
+                    <input
+                      autoFocus
+                      className="column-filter-input"
+                      placeholder={t("grid.columnFilterPlaceholder")}
+                      value={columnFilter}
+                      onChange={(e) => setColumnFilter(p.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setColumnFilter(p.id, null);
+                        }
+                      }}
+                    />
+                    {p.result.columns.length > 0 && (
+                      <span className="dim">
+                        {t("grid.columnsShown", {
+                          n: shownColumns,
+                          total: p.result.columns.length,
+                        })}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
               {p.result.warnings.length > 0 && (
                 <div className="warning-banner">
                   <strong>{t("ws.safeWarning")}</strong> {p.result.warnings.join("; ")}
@@ -299,7 +351,7 @@ export default function WorkspaceView({ workspace }: Props) {
                   {notice}
                 </div>
               )}
-              <ResultsGrid wsId={wsId} tab={p} />
+              <ResultsGrid wsId={wsId} tab={p} columnFilter={columnFilter} />
               <div className="results-status">
                 {p.result.running && <span>{t("common.running")}</span>}
                 {!p.result.running && p.result.columns.length > 0 && (

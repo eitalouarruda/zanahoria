@@ -615,6 +615,32 @@ select:focus {
   min-height: 0;
 }
 
+/* Barra de comandos del resultado, entre el editor y el grid. */
+.results-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.results-toolbar button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.results-toolbar button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.column-filter-input {
+  width: 220px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
 .grid-container {
   flex: 1;
   overflow: auto;

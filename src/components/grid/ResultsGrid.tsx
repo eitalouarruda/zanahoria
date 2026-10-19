@@ -9,11 +9,13 @@ interface Props {
   /** Id del workspace en el store. */
   wsId: string;
   tab: QueryTab;
+  /** Filtro de columnas por nombre (parcial, sin distinguir mayúsculas). */
+  columnFilter?: string;
 }
 
 const ROW_HEIGHT = 26;
 
-export default function ResultsGrid({ wsId, tab }: Props) {
+export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
   const { editCell, toggleDeleteRow, editInsertCell, removeInsertRow } = useWorkspaces();
   const t = useT();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,12 @@ export default function ResultsGrid({ wsId, tab }: Props) {
 
   const { columns, rows, editability, changes, inserts } = tab.result;
   const totalRows = rows.length + inserts.length;
+  // Índices (en `columns`) de las columnas visibles según el filtro. El cursor
+  // y la edición siguen usando el índice original; sólo cambia qué se pinta.
+  const needle = columnFilter.trim().toLowerCase();
+  const visibleCols = columns
+    .map((_, i) => i)
+    .filter((i) => !needle || columns[i].name.toLowerCase().includes(needle));
 
   const virtualizer = useVirtualizer({
     count: totalRows,
@@ -114,17 +122,20 @@ export default function ResultsGrid({ wsId, tab }: Props) {
     parentRef.current?.focus();
   };
 
-  const moveTo = (row: number, col: number) => {
-    if (totalRows === 0) return;
+  /** `pos`: posición dentro de las columnas visibles, no índice original. */
+  const moveTo = (row: number, pos: number) => {
+    if (totalRows === 0 || visibleCols.length === 0) return;
     setCursor({
       row: Math.max(0, Math.min(totalRows - 1, row)),
-      col: Math.max(0, Math.min(columns.length - 1, col)),
+      col: visibleCols[Math.max(0, Math.min(visibleCols.length - 1, pos))],
     });
   };
 
   const onGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (editing || totalRows === 0) return;
-    const cur = cursor ?? { row: 0, col: 0 };
+    if (editing || totalRows === 0 || visibleCols.length === 0) return;
+    // Posición visible del cursor; si su columna quedó oculta, la primera.
+    const cur = { row: cursor?.row ?? 0, col: Math.max(0, visibleCols.indexOf(cursor?.col ?? -1)) };
+    const lastCol = visibleCols.length - 1;
     const mod = e.ctrlKey || e.metaKey;
     const page = Math.max(1, Math.floor((parentRef.current?.clientHeight ?? 260) / ROW_HEIGHT) - 1);
     let handled = true;
@@ -139,21 +150,21 @@ export default function ResultsGrid({ wsId, tab }: Props) {
         moveTo(cur.row, mod ? 0 : cur.col - 1);
         break;
       case "ArrowRight":
-        moveTo(cur.row, mod ? columns.length - 1 : cur.col + 1);
+        moveTo(cur.row, mod ? lastCol : cur.col + 1);
         break;
       case "Tab":
         // Tab avanza y salta de fila al llegar al final (como una hoja de cálculo).
         if (e.shiftKey) {
           if (cur.col > 0) moveTo(cur.row, cur.col - 1);
-          else moveTo(cur.row - 1, columns.length - 1);
-        } else if (cur.col < columns.length - 1) moveTo(cur.row, cur.col + 1);
+          else moveTo(cur.row - 1, lastCol);
+        } else if (cur.col < lastCol) moveTo(cur.row, cur.col + 1);
         else moveTo(cur.row + 1, 0);
         break;
       case "Home":
         moveTo(mod ? 0 : cur.row, 0);
         break;
       case "End":
-        moveTo(mod ? totalRows - 1 : cur.row, columns.length - 1);
+        moveTo(mod ? totalRows - 1 : cur.row, lastCol);
         break;
       case "PageUp":
         moveTo(cur.row - page, cur.col);
@@ -163,16 +174,16 @@ export default function ResultsGrid({ wsId, tab }: Props) {
         break;
       case "Enter":
       case "F2":
-        if (cursor) startEdit(cursor.row, cursor.col);
-        else moveTo(0, 0);
+        if (cursor && visibleCols.includes(cursor.col)) startEdit(cursor.row, cursor.col);
+        else moveTo(cur.row, cur.col);
         break;
       case "Escape":
         setCursor(null);
         break;
       default:
-        if (mod && e.key.toLowerCase() === "c" && cursor) {
+        if (mod && e.key.toLowerCase() === "c" && cursor && visibleCols.includes(cursor.col)) {
           void navigator.clipboard.writeText(dbValueToDisplay(cellValue(cursor.row, cursor.col)));
-        } else if (cursor && !mod && !e.altKey && e.key.length === 1) {
+        } else if (cursor && visibleCols.includes(cursor.col) && !mod && !e.altKey && e.key.length === 1) {
           // Escribir sobre la celda empieza a editarla con esa tecla.
           startEdit(cursor.row, cursor.col, e.key);
         } else {
@@ -193,7 +204,7 @@ export default function ResultsGrid({ wsId, tab }: Props) {
         <thead>
           <tr>
             <th className="row-actions-header" />
-            {columns.map((c) => (
+            {visibleCols.map((colIndex) => columns[colIndex]).map((c) => (
               <th key={c.name} title={c.dbType}>
                 {c.name}
                 {editability?.pkColumns.includes(
@@ -240,7 +251,8 @@ export default function ResultsGrid({ wsId, tab }: Props) {
                       </button>
                     ))}
                 </td>
-                {columns.map((c, colIndex) => {
+                {visibleCols.map((colIndex) => {
+                  const c = columns[colIndex];
                   const isEditing =
                     editing?.row === rowIndex && editing.col === colIndex;
                   const isSelected =

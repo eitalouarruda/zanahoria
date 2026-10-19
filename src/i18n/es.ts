@@ -109,6 +109,10 @@ export const es: Record<MessageKey, string> = {
   "grid.removeNewRow": "Quitar fila nueva",
   "grid.restoreRow": "Restaurar fila",
   "grid.markDelete": "Marcar para eliminar",
+  "grid.filterColumns": "Filtrar columnas",
+  "grid.filterColumnsTitle": "Mostrar sólo las columnas cuyo nombre contiene el texto (sin distinguir mayúsculas)",
+  "grid.columnFilterPlaceholder": "Nombre del campo…",
+  "grid.columnsShown": "{n} de {total} columnas",
 
   "picker.filter": "Filtrar databases…",
   "picker.current": " · actual",
