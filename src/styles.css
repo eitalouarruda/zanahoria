@@ -1299,3 +1299,58 @@ kbd.conflict {
   font: inherit;
   font-weight: normal;
 }
+
+/* Mover columnas (arrastrar la cabecera) y cambiar su ancho (borde derecho). */
+.results-grid thead tr:first-child th {
+  position: relative;
+}
+
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.col-resize-handle:hover,
+body.col-resizing .col-resize-handle:active {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.results-grid th.col-drag-source {
+  opacity: 0.5;
+}
+
+.results-grid th.col-drop-before {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.results-grid th.col-drop-after {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
+
+body.col-resizing,
+body.col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.col-dragging,
+body.col-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* Diálogo de exportación CSV. */
+.csv-separator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-separator input {
+  width: 60px;
+}

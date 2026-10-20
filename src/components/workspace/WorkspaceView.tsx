@@ -14,8 +14,21 @@ import { ipc, errorMessage } from "../../ipc/commands";
 import type { Engine, FavoriteQuery, MutationPreview } from "../../ipc/types";
 import { beautify, uglify } from "../../lib/format";
 import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
-import { useT } from "../../i18n";
-import { exportResult, type ExportFormat } from "../../lib/export";
+import { useT, type MessageKey } from "../../i18n";
+import {
+  DEFAULT_CSV_SEPARATOR,
+  exportResult,
+  type ExportFormat,
+  type ExportOptions,
+} from "../../lib/export";
+
+/** Separadores de CSV ofrecidos en el diálogo de exportación. */
+const CSV_SEPARATORS: { value: string; label: MessageKey }[] = [
+  { value: ";", label: "export.sepSemicolon" },
+  { value: ",", label: "export.sepComma" },
+  { value: "\t", label: "export.sepTab" },
+  { value: "|", label: "export.sepPipe" },
+];
 import SqlEditor, { type EditorApi } from "../editor/SqlEditor";
 import ResultsGrid from "../grid/ResultsGrid";
 import SchemaTree from "../schema/SchemaTree";
@@ -59,6 +72,8 @@ export default function WorkspaceView({ workspace }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [favName, setFavName] = useState<string | null>(null);
   const [showBackup, setShowBackup] = useState(false);
+  /** Diálogo de exportación CSV: separador elegido (null = cerrado). */
+  const [csvExport, setCsvExport] = useState<{ choice: string; custom: string } | null>(null);
   const [backupSupported, setBackupSupported] = useState(false);
   const editorApi = useRef<EditorApi | null>(null);
   const splitApi = useRef<EditorApi | null>(null);
@@ -126,7 +141,8 @@ export default function WorkspaceView({ workspace }: Props) {
     if (tabs.length < 2 || idx === -1) return;
     ws.setActiveTab(wsId, tabs[(idx + delta + tabs.length) % tabs.length].id);
   };
-  const modalOpen = preview !== null || favName !== null || showBackup || showDbPicker;
+  const modalOpen =
+    preview !== null || favName !== null || showBackup || showDbPicker || csvExport !== null;
 
   /** Split: cambia el panel activo y lleva el foco a su editor. */
   const focusPane = (split: boolean) => {
@@ -150,6 +166,7 @@ export default function WorkspaceView({ workspace }: Props) {
       setFavName(null);
       setShowBackup(false);
       setShowDbPicker(false);
+      setCsvExport(null);
     } },
     { action: "newTab", run: () => ws.addTab(wsId) },
     // Sin tabs abiertos, Ctrl+W cierra la conexión (como Ctrl+Esc).
@@ -268,13 +285,14 @@ export default function WorkspaceView({ workspace }: Props) {
     setNotice(t("ws.noticeFavorite"));
   };
 
-  const doExport = async (format: ExportFormat) => {
+  const doExport = async (format: ExportFormat, options: ExportOptions = {}) => {
     if (!pane) return;
     const ok = await exportResult(
       format,
       pane.result.columns,
       pane.result.rows,
       pane.result.editability?.table ?? undefined,
+      options,
     );
     if (ok) setNotice(t("ws.noticeExported", { format: format.toUpperCase() }));
   };
@@ -548,7 +566,11 @@ export default function WorkspaceView({ workspace }: Props) {
                 <span className="spacer" />
                 {pane.result.rows.length > 0 && (
                   <>
-                    <button onClick={() => void doExport("csv")}>CSV</button>
+                    <button
+                      onClick={() => setCsvExport({ choice: DEFAULT_CSV_SEPARATOR, custom: "" })}
+                    >
+                      CSV
+                    </button>
                     <button onClick={() => void doExport("json")}>JSON</button>
                     <button onClick={() => void doExport("sql")}>SQL</button>
                   </>
@@ -611,6 +633,56 @@ export default function WorkspaceView({ workspace }: Props) {
           onClose={() => setShowDbPicker(false)}
         />
       )}
+      {csvExport !== null && pane && (() => {
+        const separator = csvExport.choice === "custom" ? csvExport.custom : csvExport.choice;
+        const confirm = () => {
+          if (!separator) return;
+          setCsvExport(null);
+          void doExport("csv", { csvSeparator: separator });
+        };
+        return (
+          <div className="modal-backdrop" onClick={() => setCsvExport(null)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <h3>{t("export.csvTitle")}</h3>
+              <label className="csv-separator">
+                {t("export.separator")}
+                <select
+                  autoFocus
+                  value={csvExport.choice}
+                  onChange={(e) => setCsvExport({ ...csvExport, choice: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") confirm();
+                  }}
+                >
+                  {CSV_SEPARATORS.map((sep) => (
+                    <option key={sep.value} value={sep.value}>
+                      {t(sep.label)}
+                    </option>
+                  ))}
+                  <option value="custom">{t("export.sepCustom")}</option>
+                </select>
+                {csvExport.choice === "custom" && (
+                  <input
+                    autoFocus
+                    maxLength={5}
+                    value={csvExport.custom}
+                    onChange={(e) => setCsvExport({ ...csvExport, custom: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") confirm();
+                    }}
+                  />
+                )}
+              </label>
+              <div className="modal-actions">
+                <button onClick={() => setCsvExport(null)}>{t("common.cancel")}</button>
+                <button className="primary" disabled={!separator} onClick={confirm}>
+                  {t("export.export")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {favName !== null && pane && (
         <div className="modal-backdrop" onClick={() => setFavName(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>

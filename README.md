@@ -53,6 +53,9 @@ transaction, and almost everything can be done from the keyboard.
   it; `!text` excludes it; `=x`, `!=x`, `>x`, `>=x`, `<x`, `<=x` compare
   (numerically when both sides are numbers); `=null` / `!=null` match NULLs.
   Both work on the rows already fetched, without re-running the query.
+- **Move and resize columns.** Drag a column header to move it; drag its right
+  edge to change its width (double-click the edge to reset it). The layout
+  only applies to the current result and is not saved.
 - **Customizable shortcuts, themes and languages.** Rebind any shortcut, choose
   a dark or light theme, and use the app in English, Português or Español.
 - **Backup and restore.** Run `pg_dump`/`pg_restore`/`mysqldump` from the app,

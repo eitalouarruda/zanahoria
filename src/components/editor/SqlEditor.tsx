@@ -100,6 +100,28 @@ function actionKeymap(
   ];
 }
 
+/**
+ * WebKitGTK (Tauri en Linux): tras pegar, CodeMirror actualiza su estado y
+ * dibuja el cursor al final de lo pegado, pero la selección nativa del DOM se
+ * queda donde estaba y lo siguiente que se tipea cae antes del texto pegado.
+ * Tras cada paste se vuelve a fijar la selección nativa en la del estado.
+ */
+const resyncSelectionAfterPaste = EditorView.updateListener.of((update) => {
+  if (!update.transactions.some((tr) => tr.isUserEvent("input.paste"))) return;
+  const view = update.view;
+  requestAnimationFrame(() => {
+    const main = view.state.selection.main;
+    const sel = document.getSelection();
+    if (!sel || !view.hasFocus || !main.empty) return;
+    const { node, offset } = view.domAtPos(main.head);
+    const range = document.createRange();
+    range.setStart(node, offset);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+});
+
 function fontTheme(size: number) {
   return EditorView.theme({
     "&": { height: "100%", fontSize: `${size}px` },
@@ -161,6 +183,7 @@ export default function SqlEditor({ value, engine, schema, onChange, onRun, apiR
         langCompartment.current.of(langExtension),
         themeCompartment.current.of(themeExtension),
         fontCompartment.current.of(fontTheme(useSettings.getState().editorFontSize)),
+        resyncSelectionAfterPaste,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChangeRef.current(update.state.doc.toString());
         }),

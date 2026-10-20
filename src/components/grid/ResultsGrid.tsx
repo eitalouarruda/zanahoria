@@ -20,6 +20,9 @@ interface Props {
 }
 
 const ROW_HEIGHT = 26;
+const MIN_COL_WIDTH = 40;
+/** Píxeles que hay que arrastrar una cabecera antes de empezar a moverla. */
+const DRAG_THRESHOLD = 5;
 
 export default function ResultsGrid({
   wsId,
@@ -49,6 +52,19 @@ export default function ResultsGrid({
   useEffect(() => setSort(null), [tab.id]);
 
   const { columns, rows, editability, changes, inserts } = tab.result;
+
+  // Orden y ancho de columnas: sólo para la vista actual (no se guardan).
+  // Se reinician al cambiar de tab o cuando la query devuelve otras columnas.
+  const colsKey = `${tab.id}|${columns.map((c) => c.name).join("\u0000")}`;
+  const [colOrder, setColOrder] = useState<{ key: string; order: number[] } | null>(null);
+  const [colWidths, setColWidths] = useState<{ key: string; widths: Record<number, number> } | null>(null);
+  const order =
+    colOrder?.key === colsKey ? colOrder.order : columns.map((_, i) => i);
+  const widths = colWidths?.key === colsKey ? colWidths.widths : {};
+  /** Columna que se está arrastrando y dónde caería (para pintar el indicador). */
+  const [drag, setDrag] = useState<{ col: number; target: number; after: boolean } | null>(null);
+  /** El mouseup de un arrastre/resize no debe contar como clic (ordenar). */
+  const suppressClick = useRef(false);
   // Vista: índices originales de `rows` filtrados/ordenados y, al final, las
   // filas nuevas (siempre visibles). Cursor, edición y cambios siguen usando
   // el índice original; la vista sólo decide qué fila va en cada posición.
@@ -69,6 +85,92 @@ export default function ResultsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtering, filtered.length]);
 
+  const widthStyle = (colIndex: number): React.CSSProperties | undefined => {
+    const w = widths[colIndex];
+    return w === undefined ? undefined : { flex: `0 0 ${w}px`, minWidth: w, maxWidth: w };
+  };
+
+  /** Arrastra el borde derecho de la cabecera para cambiar el ancho. */
+  const startResize = (e: React.MouseEvent, colIndex: number) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.currentTarget as HTMLElement).parentElement!;
+    const startX = e.clientX;
+    const startW = th.getBoundingClientRect().width;
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(MIN_COL_WIDTH, Math.round(startW + ev.clientX - startX));
+      setColWidths((prev) => ({
+        key: colsKey,
+        widths: { ...(prev?.key === colsKey ? prev.widths : {}), [colIndex]: w },
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("col-resizing");
+      suppressClick.current = true;
+      setTimeout(() => (suppressClick.current = false), 0);
+    };
+    document.body.classList.add("col-resizing");
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  /** Doble clic en el borde: vuelve al ancho por defecto. */
+  const resetWidth = (colIndex: number) =>
+    setColWidths((prev) => {
+      const next = { ...(prev?.key === colsKey ? prev.widths : {}) };
+      delete next[colIndex];
+      return { key: colsKey, widths: next };
+    });
+
+  /** Arrastrar una cabecera la mueve a otra posición. */
+  const startMove = (e: React.MouseEvent, colIndex: number) => {
+    if (e.button !== 0) return;
+    const header = (e.currentTarget as HTMLElement).parentElement!;
+    const startX = e.clientX;
+    let current: { col: number; target: number; after: boolean } | null = null;
+    const onMove = (ev: MouseEvent) => {
+      if (!current && Math.abs(ev.clientX - startX) < DRAG_THRESHOLD) return;
+      ev.preventDefault();
+      // Cabecera bajo el puntero (sólo en horizontal); fuera de todas, la del extremo.
+      const ths = Array.from(header.querySelectorAll<HTMLElement>("th[data-col]"));
+      if (ths.length === 0) return;
+      let hit = ths.find((th) => {
+        const r = th.getBoundingClientRect();
+        return ev.clientX >= r.left && ev.clientX < r.right;
+      });
+      if (!hit) {
+        hit = ev.clientX < ths[0].getBoundingClientRect().left ? ths[0] : ths[ths.length - 1];
+      }
+      const r = hit.getBoundingClientRect();
+      current = {
+        col: colIndex,
+        target: Number(hit.dataset.col),
+        after: ev.clientX > r.left + r.width / 2,
+      };
+      setDrag(current);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.classList.remove("col-dragging");
+      setDrag(null);
+      if (!current) return;
+      const { col, target, after } = current;
+      suppressClick.current = true;
+      setTimeout(() => (suppressClick.current = false), 0);
+      if (col === target) return;
+      const next = order.filter((i) => i !== col);
+      next.splice(next.indexOf(target) + (after ? 1 : 0), 0, col);
+      setColOrder({ key: colsKey, order: next });
+    };
+    document.body.classList.add("col-dragging");
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   const toggleSort = (col: string) =>
     setSort((prev) =>
       prev?.col !== col
@@ -80,9 +182,9 @@ export default function ResultsGrid({
   // Índices (en `columns`) de las columnas visibles según el filtro. El cursor
   // y la edición siguen usando el índice original; sólo cambia qué se pinta.
   const needle = columnFilter.trim().toLowerCase();
-  const visibleCols = columns
-    .map((_, i) => i)
-    .filter((i) => !needle || columns[i].name.toLowerCase().includes(needle));
+  const visibleCols = order.filter(
+    (i) => !needle || columns[i].name.toLowerCase().includes(needle),
+  );
 
   const virtualizer = useVirtualizer({
     count: totalRows,
@@ -257,12 +359,25 @@ export default function ResultsGrid({
         <thead>
           <tr>
             <th className="row-actions-header" />
-            {visibleCols.map((colIndex) => columns[colIndex]).map((c) => (
+            {visibleCols.map((colIndex) => {
+              const c = columns[colIndex];
+              return (
               <th
                 key={c.name}
-                className="sortable"
+                data-col={colIndex}
+                className={[
+                  "sortable",
+                  drag?.col === colIndex ? "col-drag-source" : "",
+                  drag && drag.target === colIndex && drag.col !== colIndex
+                    ? drag.after ? "col-drop-after" : "col-drop-before"
+                    : "",
+                ].join(" ")}
+                style={widthStyle(colIndex)}
                 title={`${c.dbType} — ${t("grid.sortTitle")}`}
-                onClick={() => toggleSort(c.name)}
+                onMouseDown={(e) => startMove(e, colIndex)}
+                onClick={() => {
+                  if (!suppressClick.current) toggleSort(c.name);
+                }}
               >
                 {c.name}
                 {editability?.pkColumns.includes(
@@ -271,14 +386,25 @@ export default function ResultsGrid({
                 {sort?.col === c.name && (
                   <span className="sort-indicator">{sort.dir === "asc" ? "▲" : "▼"}</span>
                 )}
+                <span
+                  className="col-resize-handle"
+                  title={t("grid.resizeTitle")}
+                  onMouseDown={(e) => startResize(e, colIndex)}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    resetWidth(colIndex);
+                  }}
+                />
               </th>
-            ))}
+              );
+            })}
           </tr>
           {rowFilters && (
             <tr className="filter-row">
               <th className="row-actions-header" />
-              {visibleCols.map((colIndex) => columns[colIndex]).map((c) => (
-                <th key={c.name}>
+              {visibleCols.map((colIndex) => columns[colIndex]).map((c, pos) => (
+                <th key={c.name} style={widthStyle(visibleCols[pos])}>
                   <input
                     value={rowFilters[c.name] ?? ""}
                     placeholder={t("grid.rowFilterPlaceholder")}
@@ -342,6 +468,7 @@ export default function ResultsGrid({
                   return (
                     <td
                       key={c.name}
+                      style={widthStyle(colIndex)}
                       className={[
                         v.t === "null" ? "cell-null" : "",
                         changed ? "cell-changed" : "",

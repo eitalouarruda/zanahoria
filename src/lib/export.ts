@@ -5,8 +5,18 @@ import { dbValueToDisplay } from "../ipc/types";
 
 export type ExportFormat = "csv" | "json" | "sql";
 
-function csvEscape(value: string): string {
-  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+/** Separador de CSV por defecto (el que espera Excel en locales con coma decimal). */
+export const DEFAULT_CSV_SEPARATOR = ";";
+
+export interface ExportOptions {
+  /** Separador de campos del CSV. */
+  csvSeparator?: string;
+}
+
+function csvEscape(value: string, separator: string): string {
+  if (/["\n\r]/.test(value) || value.includes(separator)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
   return value;
 }
 
@@ -44,12 +54,14 @@ export function buildExport(
   columns: ColumnMeta[],
   rows: Row[],
   tableName = "exported",
+  options: ExportOptions = {},
 ): string {
   switch (format) {
     case "csv": {
-      const header = columns.map((c) => csvEscape(c.name)).join(",");
+      const sep = options.csvSeparator || DEFAULT_CSV_SEPARATOR;
+      const header = columns.map((c) => csvEscape(c.name, sep)).join(sep);
       const body = rows.map((row) =>
-        row.map((v) => (v.t === "null" ? "" : csvEscape(dbValueToDisplay(v)))).join(","),
+        row.map((v) => (v.t === "null" ? "" : csvEscape(dbValueToDisplay(v), sep))).join(sep),
       );
       return [header, ...body].join("\n");
     }
@@ -80,6 +92,7 @@ export async function exportResult(
   columns: ColumnMeta[],
   rows: Row[],
   tableName?: string,
+  options: ExportOptions = {},
 ): Promise<boolean> {
   const ext = EXTENSIONS[format];
   const path = await save({
@@ -87,6 +100,6 @@ export async function exportResult(
     filters: [{ name: format.toUpperCase(), extensions: [ext] }],
   });
   if (!path) return false;
-  await ipc.saveTextFile(path, buildExport(format, columns, rows, tableName));
+  await ipc.saveTextFile(path, buildExport(format, columns, rows, tableName, options));
   return true;
 }
