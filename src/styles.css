@@ -1163,6 +1163,24 @@ select:focus {
   color: #fff;
 }
 
+.ui-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+
+.ui-zoom-value {
+  min-width: 48px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-zoom button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .shortcut-group h4 {
   margin: 18px 0 6px;
   color: var(--fg-dim);

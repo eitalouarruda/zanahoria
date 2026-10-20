@@ -14,11 +14,13 @@ import { useWorkspaces } from "./stores/workspaceStore";
 import type { QueryEvent } from "./ipc/types";
 import { useShortcuts } from "./lib/shortcuts";
 import { useApplyTheme } from "./lib/theme";
+import { useApplyUiZoom } from "./lib/uiZoom";
 
 export default function App() {
   const load = useConnections((s) => s.load);
   const { workspaces, active } = useWorkspaces();
   useApplyTheme();
+  useApplyUiZoom();
 
   useEffect(() => {
     void load();
@@ -52,6 +54,9 @@ export default function App() {
     { action: "zoomIn", run: () => settings().bumpEditorFontSize(1) },
     { action: "zoomOut", run: () => settings().bumpEditorFontSize(-1) },
     { action: "zoomReset", run: () => settings().resetEditorFontSize() },
+    { action: "uiZoomIn", run: () => settings().changeUiZoom(1) },
+    { action: "uiZoomOut", run: () => settings().changeUiZoom(-1) },
+    { action: "uiZoomReset", run: () => settings().changeUiZoom(0) },
     { action: "quit", run: () => void getCurrentWindow().close() },
     // Evita que el webview recargue la página si no hay workspace activo.
     { keys: ["Mod-r", "Mod-Shift-r", "F5"], run: () => {}, enabled: !workspace },

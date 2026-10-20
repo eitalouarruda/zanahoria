@@ -19,6 +19,9 @@ export type ActionId =
   | "zoomIn"
   | "zoomOut"
   | "zoomReset"
+  | "uiZoomIn"
+  | "uiZoomOut"
+  | "uiZoomReset"
   | "newTab"
   | "closeTab"
   | "nextTab"
@@ -56,6 +59,9 @@ export const ACTIONS: ActionDef[] = [
   { id: "zoomIn", group: "general", label: "action.zoomIn", defaults: ["Mod-=", "Mod-+", "Mod-Shift-+"] },
   { id: "zoomOut", group: "general", label: "action.zoomOut", defaults: ["Mod--"] },
   { id: "zoomReset", group: "general", label: "action.zoomReset", defaults: ["Mod-0"] },
+  { id: "uiZoomIn", group: "general", label: "action.uiZoomIn", defaults: ["Mod-Alt-=", "Mod-Alt-+", "Mod-Alt-Shift-+"] },
+  { id: "uiZoomOut", group: "general", label: "action.uiZoomOut", defaults: ["Mod-Alt--"] },
+  { id: "uiZoomReset", group: "general", label: "action.uiZoomReset", defaults: ["Mod-Alt-0"] },
 
   { id: "newTab", group: "tabs", label: "action.newTab", defaults: ["Mod-t"] },
   { id: "closeTab", group: "tabs", label: "action.closeTab", defaults: ["Mod-w"] },

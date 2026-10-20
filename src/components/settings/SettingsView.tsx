@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { LANGUAGES, useT, type MessageKey } from "../../i18n";
 import {
   ACTIONS,
@@ -11,7 +12,12 @@ import {
   type ActionId,
 } from "../../lib/keymap";
 import { setShortcutsSuspended } from "../../lib/shortcuts";
-import { useSettings, type Language, type ThemeSetting } from "../../stores/settingsStore";
+import {
+  uiZoomFor,
+  useSettings,
+  type Language,
+  type ThemeSetting,
+} from "../../stores/settingsStore";
 
 const GROUPS: { id: ActionGroup; label: MessageKey }[] = [
   { id: "general", label: "settings.group.general" },
@@ -39,6 +45,11 @@ interface Recording {
 export default function SettingsView() {
   const t = useT();
   const settings = useSettings();
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   return (
     <div className="global-view settings-view">
@@ -89,9 +100,56 @@ export default function SettingsView() {
             onChange={(e) => settings.setEditorFontSize(Number(e.target.value) || 13)}
           />
         </div>
+        <UiZoomRow />
+        {version && (
+          <div className="settings-row">
+            <span>{t("settings.version")}</span>
+            <span className="dim">v{version}</span>
+          </div>
+        )}
       </section>
 
       <ShortcutsSection />
+    </div>
+  );
+}
+
+/** Tamaño de la interfaz en la pantalla donde está la ventana. */
+function UiZoomRow() {
+  const t = useT();
+  const { monitor, uiZoom, shortcuts, changeUiZoom } = useSettings();
+  if (monitor === null) return null;
+  const auto = uiZoom[monitor] === undefined;
+  const zoom = uiZoomFor({ monitor, uiZoom });
+  const hint = (label: MessageKey, action: ActionId) => {
+    const keys = keysFor(action, shortcuts);
+    return keys.length > 0 ? `${t(label)} (${formatShortcut(keys[0])})` : t(label);
+  };
+  return (
+    <div className="settings-row">
+      <span>
+        {t("settings.uiZoom")}{" "}
+        <small className="dim">
+          ({monitor}
+          {auto ? `, ${t("settings.uiZoom.autoShort")}` : ""})
+        </small>
+      </span>
+      <div className="ui-zoom">
+        <button onClick={() => changeUiZoom(-1)} title={hint("settings.uiZoom.out", "uiZoomOut")}>
+          −
+        </button>
+        <span className="ui-zoom-value">{Math.round(zoom * 100)} %</span>
+        <button onClick={() => changeUiZoom(1)} title={hint("settings.uiZoom.in", "uiZoomIn")}>
+          +
+        </button>
+        <button
+          onClick={() => changeUiZoom(0)}
+          disabled={auto}
+          title={hint("settings.uiZoom.reset", "uiZoomReset")}
+        >
+          {t("settings.uiZoom.auto")}
+        </button>
+      </div>
     </div>
   );
 }
