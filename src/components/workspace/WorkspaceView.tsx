@@ -90,6 +90,20 @@ export default function WorkspaceView({ workspace }: Props) {
       return next;
     });
 
+  /** Filtros de filas por panel (id del panel → columna → texto; ausente = cerrado). */
+  const [rowFilters, setRowFilters] = useState<Record<string, Record<string, string>>>({});
+  const toggleRowFilters = (paneId: string) =>
+    setRowFilters((prev) => {
+      const next = { ...prev };
+      if (next[paneId]) delete next[paneId];
+      else next[paneId] = {};
+      return next;
+    });
+  const setRowFilter = (paneId: string, col: string, text: string) =>
+    setRowFilters((prev) => ({ ...prev, [paneId]: { ...prev[paneId], [col]: text } }));
+  /** Filas visibles tras filtrar, por panel (ausente/null = sin filtro). */
+  const [shownRows, setShownRows] = useState<Record<string, number | null>>({});
+
   /** Ejecuta en el panel: la selección de su editor si la hay; si no, todo su texto. */
   const run = (p: QueryTab, confirmDangerous = false, selection?: string) => {
     const sel = selection ?? apiFor(p).current?.getSelection();
@@ -308,6 +322,14 @@ export default function WorkspaceView({ workspace }: Props) {
                 >
                   {t("grid.filterColumns")}
                 </button>
+                <button
+                  className={rowFilters[p.id] ? "active" : undefined}
+                  disabled={p.result.columns.length === 0 && !rowFilters[p.id]}
+                  onClick={() => toggleRowFilters(p.id)}
+                  title={t("grid.filterRowsTitle")}
+                >
+                  {t("grid.filterRows")}
+                </button>
                 {filterOpen && (
                   <>
                     <input
@@ -351,12 +373,21 @@ export default function WorkspaceView({ workspace }: Props) {
                   {notice}
                 </div>
               )}
-              <ResultsGrid wsId={wsId} tab={p} columnFilter={columnFilter} />
+              <ResultsGrid
+                wsId={wsId}
+                tab={p}
+                columnFilter={columnFilter}
+                rowFilters={rowFilters[p.id]}
+                onRowFilterChange={(col, text) => setRowFilter(p.id, col, text)}
+                onShownRowsChange={(n) => setShownRows((prev) => ({ ...prev, [p.id]: n }))}
+              />
               <div className="results-status">
                 {p.result.running && <span>{t("common.running")}</span>}
                 {!p.result.running && p.result.columns.length > 0 && (
                   <span>
-                    {t("ws.rows", { n: p.result.rows.length })}
+                    {shownRows[p.id] != null
+                      ? t("grid.rowsShown", { n: shownRows[p.id]!, total: p.result.rows.length })
+                      : t("ws.rows", { n: p.result.rows.length })}
                     {p.result.truncated && t("ws.partial")}
                   </span>
                 )}

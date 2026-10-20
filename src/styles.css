@@ -1271,3 +1271,31 @@ kbd.conflict {
   margin: 0;
   white-space: pre-wrap;
 }
+
+/* Orden por columna: clic en la cabecera. */
+.results-grid th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.results-grid th.sortable:hover {
+  color: var(--accent);
+}
+
+.sort-indicator {
+  font-size: 9px;
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+/* Fila de filtros por columna, bajo las cabeceras. */
+.results-grid .filter-row th {
+  padding: 2px 4px;
+}
+
+.results-grid .filter-row input {
+  width: 100%;
+  padding: 1px 4px;
+  font: inherit;
+  font-weight: normal;
+}

@@ -46,7 +46,13 @@ transaction, and almost everything can be done from the keyboard.
 - **Column filter.** On wide results, click **Filter columns** in the bar
   above the grid and type part of a field name: only the columns whose name
   contains it stay visible (partial, case-insensitive match, like
-  `ILIKE '%text%'`). Rows are not filtered.
+  `ILIKE '%text%'`).
+- **Sort and filter rows.** Click a column header to sort the loaded rows
+  (ascending → descending → original order; NULLs last). Click **Filter rows**
+  to get a filter box under each header: plain text matches cells that contain
+  it; `!text` excludes it; `=x`, `!=x`, `>x`, `>=x`, `<x`, `<=x` compare
+  (numerically when both sides are numbers); `=null` / `!=null` match NULLs.
+  Both work on the rows already fetched, without re-running the query.
 - **Customizable shortcuts, themes and languages.** Rebind any shortcut, choose
   a dark or light theme, and use the app in English, Português or Español.
 - **Backup and restore.** Run `pg_dump`/`pg_restore`/`mysqldump` from the app,

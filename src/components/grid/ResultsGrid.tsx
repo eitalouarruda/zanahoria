@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { DbValue } from "../../ipc/types";
 import { dbValueToDisplay, displayToDbValue } from "../../ipc/types";
 import { useWorkspaces, type QueryTab } from "../../stores/workspaceStore";
 import { useT } from "../../i18n";
+import { computeRowView, type GridSort } from "../../lib/gridView";
 
 interface Props {
   /** Id del workspace en el store. */
@@ -11,11 +12,23 @@ interface Props {
   tab: QueryTab;
   /** Filtro de columnas por nombre (parcial, sin distinguir mayúsculas). */
   columnFilter?: string;
+  /** Filtros de filas por columna (nombre → texto); undefined = barra cerrada. */
+  rowFilters?: Record<string, string>;
+  onRowFilterChange?: (col: string, text: string) => void;
+  /** Avisa cuántas filas quedan tras filtrar (null = sin filtro). */
+  onShownRowsChange?: (n: number | null) => void;
 }
 
 const ROW_HEIGHT = 26;
 
-export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
+export default function ResultsGrid({
+  wsId,
+  tab,
+  columnFilter = "",
+  rowFilters,
+  onRowFilterChange,
+  onShownRowsChange,
+}: Props) {
   const { editCell, toggleDeleteRow, editInsertCell, removeInsertRow } = useWorkspaces();
   const t = useT();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -30,8 +43,40 @@ export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
   /** Celda activa (navegación con teclado). */
   const [cursor, setCursor] = useState<{ row: number; col: number } | null>(null);
 
+  /** Orden por columna (clic en la cabecera: asc → desc → sin orden). */
+  const [sort, setSort] = useState<GridSort | null>(null);
+  // El grid se reutiliza entre tabs: el orden es de cada tab.
+  useEffect(() => setSort(null), [tab.id]);
+
   const { columns, rows, editability, changes, inserts } = tab.result;
-  const totalRows = rows.length + inserts.length;
+  // Vista: índices originales de `rows` filtrados/ordenados y, al final, las
+  // filas nuevas (siempre visibles). Cursor, edición y cambios siguen usando
+  // el índice original; la vista sólo decide qué fila va en cada posición.
+  const filtered = useMemo(
+    () => computeRowView(columns, rows, rowFilters ?? {}, sort),
+    [columns, rows, rowFilters, sort],
+  );
+  const view = useMemo(
+    () => [...filtered, ...inserts.map((_, i) => rows.length + i)],
+    [filtered, inserts, rows.length],
+  );
+  const posOf = useMemo(() => new Map(view.map((row, pos) => [row, pos])), [view]);
+  const totalRows = view.length;
+  const filtering =
+    !!rowFilters && Object.values(rowFilters).some((text) => text.trim() !== "");
+  useEffect(() => {
+    onShownRowsChange?.(filtering ? filtered.length : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtering, filtered.length]);
+
+  const toggleSort = (col: string) =>
+    setSort((prev) =>
+      prev?.col !== col
+        ? { col, dir: "asc" }
+        : prev.dir === "asc"
+          ? { col, dir: "desc" }
+          : null,
+    );
   // Índices (en `columns`) de las columnas visibles según el filtro. El cursor
   // y la edición siguen usando el índice original; sólo cambia qué se pinta.
   const needle = columnFilter.trim().toLowerCase();
@@ -52,7 +97,9 @@ export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
   // Mantener la celda activa visible (vertical vía virtualizer, horizontal vía DOM).
   useEffect(() => {
     if (!cursor) return;
-    virtualizer.scrollToIndex(cursor.row, { align: "auto" });
+    const pos = posOf.get(cursor.row);
+    if (pos === undefined) return;
+    virtualizer.scrollToIndex(pos, { align: "auto" });
     requestAnimationFrame(() => {
       parentRef.current
         ?.querySelector(`td[data-row="${cursor.row}"][data-col="${cursor.col}"]`)
@@ -122,19 +169,25 @@ export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
     parentRef.current?.focus();
   };
 
-  /** `pos`: posición dentro de las columnas visibles, no índice original. */
+  /** `row` y `pos`: posiciones en la vista (filas y columnas visibles), no índices originales. */
   const moveTo = (row: number, pos: number) => {
     if (totalRows === 0 || visibleCols.length === 0) return;
     setCursor({
-      row: Math.max(0, Math.min(totalRows - 1, row)),
+      row: view[Math.max(0, Math.min(totalRows - 1, row))],
       col: visibleCols[Math.max(0, Math.min(visibleCols.length - 1, pos))],
     });
   };
 
   const onGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (editing || totalRows === 0 || visibleCols.length === 0) return;
-    // Posición visible del cursor; si su columna quedó oculta, la primera.
-    const cur = { row: cursor?.row ?? 0, col: Math.max(0, visibleCols.indexOf(cursor?.col ?? -1)) };
+    // Posición visible del cursor; si su fila/columna quedó oculta, la primera.
+    const cur = {
+      row: posOf.get(cursor?.row ?? -1) ?? 0,
+      col: Math.max(0, visibleCols.indexOf(cursor?.col ?? -1)),
+    };
+    // Cursor sobre una fila o columna oculta por los filtros.
+    const cursorShown =
+      !!cursor && visibleCols.includes(cursor.col) && posOf.has(cursor.row);
     const lastCol = visibleCols.length - 1;
     const mod = e.ctrlKey || e.metaKey;
     const page = Math.max(1, Math.floor((parentRef.current?.clientHeight ?? 260) / ROW_HEIGHT) - 1);
@@ -174,16 +227,16 @@ export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
         break;
       case "Enter":
       case "F2":
-        if (cursor && visibleCols.includes(cursor.col)) startEdit(cursor.row, cursor.col);
+        if (cursorShown && cursor) startEdit(cursor.row, cursor.col);
         else moveTo(cur.row, cur.col);
         break;
       case "Escape":
         setCursor(null);
         break;
       default:
-        if (mod && e.key.toLowerCase() === "c" && cursor && visibleCols.includes(cursor.col)) {
+        if (mod && e.key.toLowerCase() === "c" && cursorShown && cursor) {
           void navigator.clipboard.writeText(dbValueToDisplay(cellValue(cursor.row, cursor.col)));
-        } else if (cursor && visibleCols.includes(cursor.col) && !mod && !e.altKey && e.key.length === 1) {
+        } else if (cursorShown && cursor && !mod && !e.altKey && e.key.length === 1) {
           // Escribir sobre la celda empieza a editarla con esa tecla.
           startEdit(cursor.row, cursor.col, e.key);
         } else {
@@ -205,18 +258,43 @@ export default function ResultsGrid({ wsId, tab, columnFilter = "" }: Props) {
           <tr>
             <th className="row-actions-header" />
             {visibleCols.map((colIndex) => columns[colIndex]).map((c) => (
-              <th key={c.name} title={c.dbType}>
+              <th
+                key={c.name}
+                className="sortable"
+                title={`${c.dbType} — ${t("grid.sortTitle")}`}
+                onClick={() => toggleSort(c.name)}
+              >
                 {c.name}
                 {editability?.pkColumns.includes(
                   editability.columnSources[c.name] ?? "",
                 ) && <span className="pk-badge">PK</span>}
+                {sort?.col === c.name && (
+                  <span className="sort-indicator">{sort.dir === "asc" ? "▲" : "▼"}</span>
+                )}
               </th>
             ))}
           </tr>
+          {rowFilters && (
+            <tr className="filter-row">
+              <th className="row-actions-header" />
+              {visibleCols.map((colIndex) => columns[colIndex]).map((c) => (
+                <th key={c.name}>
+                  <input
+                    value={rowFilters[c.name] ?? ""}
+                    placeholder={t("grid.rowFilterPlaceholder")}
+                    title={t("grid.rowFilterTitle")}
+                    onChange={(e) => onRowFilterChange?.(c.name, e.target.value)}
+                    // Que las teclas no lleguen a la navegación del grid.
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                </th>
+              ))}
+            </tr>
+          )}
         </thead>
         <tbody style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            const rowIndex = virtualRow.index;
+            const rowIndex = view[virtualRow.index];
             const isInsert = rowIndex >= rows.length;
             const change = changes[rowIndex];
             const deleted = change?.kind === "delete";

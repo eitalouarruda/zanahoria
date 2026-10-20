@@ -119,6 +119,12 @@ export const en = {
   "grid.filterColumnsTitle": "Show only the columns whose name contains the text (case-insensitive)",
   "grid.columnFilterPlaceholder": "Field name…",
   "grid.columnsShown": "{n} of {total} columns",
+  "grid.filterRows": "Filter rows",
+  "grid.filterRowsTitle": "Show a filter box under each column header",
+  "grid.rowFilterPlaceholder": "Filter…",
+  "grid.rowFilterTitle": "text: contains · !text: does not contain · =x, !=x, >x, >=x, <x, <=x · =null, !=null",
+  "grid.sortTitle": "click to sort (asc → desc → none)",
+  "grid.rowsShown": "{n} of {total} row(s)",
 
   // Database picker
   "picker.filter": "Filter databases…",

@@ -113,6 +113,12 @@ export const pt: Record<MessageKey, string> = {
   "grid.filterColumnsTitle": "Mostrar só as colunas cujo nome contém o texto (sem diferenciar maiúsculas)",
   "grid.columnFilterPlaceholder": "Nome do campo…",
   "grid.columnsShown": "{n} de {total} colunas",
+  "grid.filterRows": "Filtrar linhas",
+  "grid.filterRowsTitle": "Mostrar um filtro abaixo do cabeçalho de cada coluna",
+  "grid.rowFilterPlaceholder": "Filtrar…",
+  "grid.rowFilterTitle": "texto: contém · !texto: não contém · =x, !=x, >x, >=x, <x, <=x · =null, !=null",
+  "grid.sortTitle": "clique para ordenar (asc → desc → sem ordem)",
+  "grid.rowsShown": "{n} de {total} linha(s)",
 
   "picker.filter": "Filtrar databases…",
   "picker.current": " · atual",
