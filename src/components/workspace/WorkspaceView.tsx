@@ -571,6 +571,7 @@ export default function WorkspaceView({ workspace }: Props) {
                     >
                       CSV
                     </button>
+                    <button onClick={() => void doExport("xlsx")}>XLSX</button>
                     <button onClick={() => void doExport("json")}>JSON</button>
                     <button onClick={() => void doExport("sql")}>SQL</button>
                   </>

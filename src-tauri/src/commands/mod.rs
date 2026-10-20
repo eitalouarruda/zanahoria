@@ -1,5 +1,6 @@
 pub mod backup_cmd;
 pub mod connections;
+pub mod export;
 pub mod mutations;
 pub mod platform;
 pub mod query;

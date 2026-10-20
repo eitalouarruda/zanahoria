@@ -6,6 +6,7 @@ import type {
   ToolStatus,
   ConnectionConfig,
   ConnInfo,
+  ColumnMeta,
   DbSchema,
   Editability,
   FavoriteQuery,
@@ -14,6 +15,7 @@ import type {
   MutationResult,
   PendingChange,
   PlatformCapabilities,
+  Row,
   RunQueryResponse,
   SavedConnection,
 } from "./types";
@@ -74,6 +76,8 @@ export const ipc = {
 
   saveTextFile: (path: string, content: string) =>
     invoke<void>("save_text_file", { path, content }),
+  saveXlsxFile: (path: string, columns: ColumnMeta[], rows: Row[]) =>
+    invoke<void>("save_xlsx_file", { path, columns, rows }),
   kvGet: <T>(table: "settings" | "ui_state", key: string) =>
     invoke<T | null>("kv_get", { table, key }),
   kvSet: (table: "settings" | "ui_state", key: string, value: unknown) =>

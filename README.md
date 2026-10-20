@@ -42,7 +42,7 @@ transaction, and almost everything can be done from the keyboard.
   (columns of the tables in the current statement, aliases, column types),
   current-statement highlighting, search and replace, and formatting.
 - **Editable results grid.** Navigate with the arrow keys, edit cells in place,
-  add or delete rows, load more rows on demand and export to CSV, JSON or SQL.
+  add or delete rows, load more rows on demand and export to CSV, XLSX (Excel, with typed numbers and dates), JSON or SQL.
 - **Column filter.** On wide results, click **Filter columns** in the bar
   above the grid and type part of a field name: only the columns whose name
   contains it stay visible (partial, case-insensitive match, like

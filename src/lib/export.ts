@@ -3,7 +3,10 @@ import { ipc } from "../ipc/commands";
 import type { ColumnMeta, DbValue, Row } from "../ipc/types";
 import { dbValueToDisplay } from "../ipc/types";
 
-export type ExportFormat = "csv" | "json" | "sql";
+export type ExportFormat = "csv" | "json" | "sql" | "xlsx";
+
+/** Formatos de texto que se generan en el frontend; XLSX se escribe en el backend. */
+export type TextExportFormat = Exclude<ExportFormat, "xlsx">;
 
 /** Separador de CSV por defecto (el que espera Excel en locales con coma decimal). */
 export const DEFAULT_CSV_SEPARATOR = ";";
@@ -50,7 +53,7 @@ function cellRaw(v: DbValue): unknown {
 }
 
 export function buildExport(
-  format: ExportFormat,
+  format: TextExportFormat,
   columns: ColumnMeta[],
   rows: Row[],
   tableName = "exported",
@@ -85,7 +88,12 @@ export function buildExport(
   }
 }
 
-const EXTENSIONS: Record<ExportFormat, string> = { csv: "csv", json: "json", sql: "sql" };
+const EXTENSIONS: Record<ExportFormat, string> = {
+  csv: "csv",
+  json: "json",
+  sql: "sql",
+  xlsx: "xlsx",
+};
 
 export async function exportResult(
   format: ExportFormat,
@@ -100,6 +108,11 @@ export async function exportResult(
     filters: [{ name: format.toUpperCase(), extensions: [ext] }],
   });
   if (!path) return false;
-  await ipc.saveTextFile(path, buildExport(format, columns, rows, tableName, options));
+  if (format === "xlsx") {
+    // Celdas tipadas (números, fechas, booleanos) para usar fórmulas directamente en Excel.
+    await ipc.saveXlsxFile(path, columns, rows);
+  } else {
+    await ipc.saveTextFile(path, buildExport(format, columns, rows, tableName, options));
+  }
   return true;
 }
