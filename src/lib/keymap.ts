@@ -51,8 +51,8 @@ export interface ActionDef {
 export const ACTIONS: ActionDef[] = [
   { id: "openDatabase", group: "general", label: "action.openDatabase", defaults: ["Mod-k"] },
   { id: "newConnection", group: "general", label: "action.newConnection", defaults: ["Mod-n", "Mod-Shift-n"] },
-  { id: "nextWorkspace", group: "general", label: "action.nextWorkspace", defaults: ["Mod-Shift-]", "Mod-Shift-}"] },
-  { id: "prevWorkspace", group: "general", label: "action.prevWorkspace", defaults: ["Mod-Shift-[", "Mod-Shift-{"] },
+  { id: "nextWorkspace", group: "general", label: "action.nextWorkspace", defaults: ["Mod-Tab", "Mod-Shift-]", "Mod-Shift-}"] },
+  { id: "prevWorkspace", group: "general", label: "action.prevWorkspace", defaults: ["Mod-Shift-Tab", "Mod-Shift-[", "Mod-Shift-{"] },
   { id: "closeWorkspace", group: "general", label: "action.closeWorkspace", defaults: ["Mod-Escape"] },
   { id: "openSettings", group: "general", label: "action.openSettings", defaults: ["Mod-,"] },
   { id: "quit", group: "general", label: "action.quit", defaults: ["Mod-q"] },
@@ -65,8 +65,8 @@ export const ACTIONS: ActionDef[] = [
 
   { id: "newTab", group: "tabs", label: "action.newTab", defaults: ["Mod-t"] },
   { id: "closeTab", group: "tabs", label: "action.closeTab", defaults: ["Mod-w"] },
-  { id: "nextTab", group: "tabs", label: "action.nextTab", defaults: ["Mod-]", "Mod-Tab", "Mod-PageDown"] },
-  { id: "prevTab", group: "tabs", label: "action.prevTab", defaults: ["Mod-[", "Mod-Shift-Tab", "Mod-PageUp"] },
+  { id: "nextTab", group: "tabs", label: "action.nextTab", defaults: ["Mod-]", "Mod-PageDown"] },
+  { id: "prevTab", group: "tabs", label: "action.prevTab", defaults: ["Mod-[", "Mod-PageUp"] },
 
   { id: "runCurrent", group: "editor", label: "action.runCurrent", defaults: ["Mod-Enter"] },
   { id: "runAll", group: "editor", label: "action.runAll", defaults: ["Mod-Shift-Enter"] },
