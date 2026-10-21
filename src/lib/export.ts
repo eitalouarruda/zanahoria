@@ -1,12 +1,8 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { ipc } from "../ipc/commands";
-import type { ColumnMeta, DbValue, Row } from "../ipc/types";
-import { dbValueToDisplay } from "../ipc/types";
+import type { ResultState } from "../stores/workspaceStore";
 
 export type ExportFormat = "csv" | "json" | "sql" | "xlsx";
-
-/** Formatos de texto que se generan en el frontend; XLSX se escribe en el backend. */
-export type TextExportFormat = Exclude<ExportFormat, "xlsx">;
 
 /** Separador de CSV por defecto (el que espera Excel en locales con coma decimal). */
 export const DEFAULT_CSV_SEPARATOR = ";";
@@ -14,78 +10,27 @@ export const DEFAULT_CSV_SEPARATOR = ";";
 export interface ExportOptions {
   /** Separador de campos del CSV. */
   csvSeparator?: string;
+  /** Tabla destino de los INSERT del formato SQL. */
+  tableName?: string;
 }
 
-function csvEscape(value: string, separator: string): string {
-  if (/["\n\r]/.test(value) || value.includes(separator)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
+/**
+ * Cómo se exporta un resultado. Siempre se exporta TODO lo que devuelve la
+ * consulta, nunca lo filtrado/ordenado en el grid:
+ * - "query": se re-ejecuta en el backend sin límite de filas (solo lectura).
+ * - "rows": la consulta no se puede re-ejecutar sin efectos, pero su
+ *   resultado ya está completo en memoria.
+ * - "blocked": no se puede re-ejecutar y el resultado está incompleto.
+ */
+export type ExportPlan =
+  | { mode: "query"; sql: string }
+  | { mode: "rows"; total: number }
+  | { mode: "blocked"; loaded: number };
 
-function sqlLiteral(v: DbValue): string {
-  switch (v.t) {
-    case "null":
-      return "NULL";
-    case "bool":
-      return v.v ? "TRUE" : "FALSE";
-    case "int":
-    case "float":
-      return String(v.v);
-    case "decimal":
-      return v.v;
-    case "json":
-      return `'${JSON.stringify(v.v).replace(/'/g, "''")}'`;
-    default:
-      return `'${String(v.v).replace(/'/g, "''")}'`;
-  }
-}
-
-function cellRaw(v: DbValue): unknown {
-  switch (v.t) {
-    case "null":
-      return null;
-    case "json":
-      return v.v;
-    default:
-      return v.v;
-  }
-}
-
-export function buildExport(
-  format: TextExportFormat,
-  columns: ColumnMeta[],
-  rows: Row[],
-  tableName = "exported",
-  options: ExportOptions = {},
-): string {
-  switch (format) {
-    case "csv": {
-      const sep = options.csvSeparator || DEFAULT_CSV_SEPARATOR;
-      const header = columns.map((c) => csvEscape(c.name, sep)).join(sep);
-      const body = rows.map((row) =>
-        row.map((v) => (v.t === "null" ? "" : csvEscape(dbValueToDisplay(v), sep))).join(sep),
-      );
-      return [header, ...body].join("\n");
-    }
-    case "json": {
-      const objects = rows.map((row) =>
-        Object.fromEntries(columns.map((c, i) => [c.name, cellRaw(row[i])])),
-      );
-      return JSON.stringify(objects, null, 2);
-    }
-    case "sql": {
-      const cols = columns.map((c) => `"${c.name}"`).join(", ");
-      return rows
-        .map(
-          (row) =>
-            `INSERT INTO "${tableName}" (${cols}) VALUES (${row
-              .map(sqlLiteral)
-              .join(", ")});`,
-        )
-        .join("\n");
-    }
-  }
+export function exportPlan(result: ResultState): ExportPlan {
+  if (result.readOnly && result.executedSql) return { mode: "query", sql: result.executedSql };
+  if (!result.truncated && !result.running) return { mode: "rows", total: result.rows.length };
+  return { mode: "blocked", loaded: result.rows.length };
 }
 
 const EXTENSIONS: Record<ExportFormat, string> = {
@@ -95,24 +40,51 @@ const EXTENSIONS: Record<ExportFormat, string> = {
   xlsx: "xlsx",
 };
 
+export interface ExportTarget {
+  connId: string;
+  database: string;
+  result: ResultState;
+  /** Id para cancelar con `ipc.cancelQuery` y seguir el progreso. */
+  exportId: string;
+  /** Se llama al empezar a escribir (tras elegir el archivo). */
+  onStart?: () => void;
+}
+
+/**
+ * Pide el archivo destino y exporta según `exportPlan`. Devuelve las filas
+ * exportadas, o null si el usuario canceló el diálogo de guardado.
+ */
 export async function exportResult(
   format: ExportFormat,
-  columns: ColumnMeta[],
-  rows: Row[],
-  tableName?: string,
+  target: ExportTarget,
   options: ExportOptions = {},
-): Promise<boolean> {
+): Promise<number | null> {
+  const plan = exportPlan(target.result);
+  if (plan.mode === "blocked") throw new Error("export blocked: incomplete result");
   const ext = EXTENSIONS[format];
   const path = await save({
-    defaultPath: `${tableName ?? "result"}.${ext}`,
+    defaultPath: `${options.tableName ?? "result"}.${ext}`,
     filters: [{ name: format.toUpperCase(), extensions: [ext] }],
   });
-  if (!path) return false;
-  if (format === "xlsx") {
-    // Celdas tipadas (números, fechas, booleanos) para usar fórmulas directamente en Excel.
-    await ipc.saveXlsxFile(path, columns, rows);
-  } else {
-    await ipc.saveTextFile(path, buildExport(format, columns, rows, tableName, options));
-  }
-  return true;
+  if (!path) return null;
+  target.onStart?.();
+  const summary =
+    plan.mode === "query"
+      ? await ipc.exportQuery({
+          exportId: target.exportId,
+          connId: target.connId,
+          database: target.database,
+          sql: plan.sql,
+          format,
+          path,
+          options,
+        })
+      : await ipc.exportRows({
+          path,
+          format,
+          columns: target.result.columns,
+          rows: target.result.rows,
+          options,
+        });
+  return summary.rows;
 }

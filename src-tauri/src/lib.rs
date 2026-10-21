@@ -6,7 +6,9 @@ mod update;
 
 use tauri::Manager;
 
-use commands::{backup_cmd, connections, export, mutations, platform, query, schema, storage, update_cmd};
+use commands::{
+    backup_cmd, connections, export, mutations, platform, query, schema, storage, update_cmd,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -42,7 +44,8 @@ pub fn run() {
             storage::save_favorite,
             storage::delete_favorite,
             storage::save_text_file,
-            export::save_xlsx_file,
+            export::export_query,
+            export::export_rows,
             storage::kv_get,
             storage::kv_set,
             platform::get_platform_capabilities,

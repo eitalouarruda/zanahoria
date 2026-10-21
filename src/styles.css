@@ -790,6 +790,22 @@ select:focus {
   white-space: pre-wrap;
 }
 
+.error-banner .error-location {
+  margin-left: 10px;
+  padding: 1px 8px;
+  font-size: 12px;
+  color: var(--red);
+  background: transparent;
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.error-banner .error-location:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .warning-banner {
   background: rgba(216, 160, 60, 0.14);
   color: var(--yellow);
@@ -1353,4 +1369,38 @@ body.col-dragging * {
 
 .csv-separator input {
   width: 60px;
+}
+
+.export-warning {
+  margin: 0 0 12px;
+  max-width: 460px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.export-warning.blocked {
+  color: var(--red);
+}
+
+.notice-banner.exporting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: default;
+}
+
+.connection-filter {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.filter-hint {
+  font-size: 12px;
+}
+
+.connection-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }

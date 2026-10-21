@@ -26,6 +26,8 @@ macro_rules! spawn_stream {
             let mut total_rows: u64 = 0;
             let mut rows_since_pause: usize = 0;
             let mut affected: Option<u64> = None;
+            // Statements del script ya completados (ubica errores por línea).
+            let mut statements_done: usize = 0;
 
             macro_rules! flush {
                 () => {
@@ -63,6 +65,7 @@ macro_rules! spawn_stream {
                     }
                     Some(Ok(Either::Left(result))) => {
                         affected = Some(affected.unwrap_or(0) + result.rows_affected());
+                        statements_done += 1;
                     }
                     Some(Ok(Either::Right(row))) => {
                         if !sent_columns {
@@ -112,7 +115,8 @@ macro_rules! spawn_stream {
                         }
                     }
                     Some(Err(e)) => {
-                        let _ = tx.send(Err($crate::error::DbError::from(e))).await;
+                        let err = $crate::error::DbError::from(e).in_statement(statements_done);
+                        let _ = tx.send(Err(err)).await;
                         return;
                     }
                 }

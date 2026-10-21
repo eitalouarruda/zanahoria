@@ -284,3 +284,73 @@ async fn pg_pool_por_database() {
     pools.disconnect(&cfg.id).await.unwrap();
     assert!(!pools.is_connected(&cfg.id).await);
 }
+
+async fn first_error(handle: &EngineHandle, sql: &str) -> db_core::DbError {
+    let mut stream = handle.execute(sql.to_string(), ExecOpts::default());
+    while let Some(event) = stream.events.recv().await {
+        if let Err(e) = event {
+            return e;
+        }
+    }
+    panic!("expected an error for {sql:?}");
+}
+
+/// La posición del error es relativa a todo el script enviado, también
+/// cuando falla un statement que no es el primero.
+#[tokio::test]
+async fn pg_error_position() {
+    let Some(cfg) = pg_config() else { return };
+    let handle = EngineHandle::connect(&cfg, 1).await.unwrap();
+    let sql = "SELECT 1;\nSELECT 'ñandú',\n  (1 + );";
+    let err = first_error(&handle, sql).await;
+    let offset = sql.chars().position(|c| c == ')').unwrap();
+    assert_eq!(
+        err.position(),
+        Some(&db_core::ErrorPosition::Offset { offset }),
+        "{err}"
+    );
+    handle.disconnect().await;
+}
+
+#[tokio::test]
+async fn mysql_error_position() {
+    if std::env::var("ZANAHORIA_TEST_MYSQL").is_err() {
+        return;
+    }
+    let cfg = ConnectionConfig {
+        id: "test-mysql".into(),
+        name: "test".into(),
+        engine: Engine::Mysql,
+        host: "localhost".into(),
+        port: Some(33306),
+        database: "zanahoria".into(),
+        user: "zanahoria".into(),
+        password: Some("zanahoria".into()),
+        use_tls: false,
+        safe_mode: false,
+        color: None,
+        group: None,
+    };
+    let handle = EngineHandle::connect(&cfg, 1).await.unwrap();
+    let err = first_error(&handle, "SELECT\n  1,\n  (1 + );").await;
+    assert_eq!(
+        err.position(),
+        Some(&db_core::ErrorPosition::Line {
+            line: 3,
+            statement: 0
+        }),
+        "{err}"
+    );
+    // En scripts, la línea es relativa al statement que falla (sin los
+    // espacios iniciales).
+    let err = first_error(&handle, "SELECT 1;\nSELECT 2;\n\nSELECT\n  (1 + );").await;
+    assert_eq!(
+        err.position(),
+        Some(&db_core::ErrorPosition::Line {
+            line: 2,
+            statement: 2
+        }),
+        "{err}"
+    );
+    handle.disconnect().await;
+}

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use db_core::{analyze_query, dangerous_statements, Editability, ExecEvent, ExecOpts};
+use db_core::{
+    analyze_query, dangerous_statements, is_read_only, Editability, ErrorPosition, ExecEvent,
+    ExecOpts,
+};
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 
@@ -15,6 +18,8 @@ pub struct RunQueryResponse {
     pub started: bool,
     pub editability: Option<Editability>,
     pub warnings: Vec<String>,
+    /// Se puede re-ejecutar sin efectos (p.ej. para exportar todas las filas).
+    pub read_only: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -28,8 +33,14 @@ struct QueryEventPayload {
 #[derive(Serialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 enum QueryEventBody {
-    Exec { event: ExecEvent },
-    Error { message: String },
+    Exec {
+        event: ExecEvent,
+    },
+    Error {
+        message: String,
+        /// Posición del error dentro del SQL enviado, si el motor la reporta.
+        position: Option<ErrorPosition>,
+    },
 }
 
 #[tauri::command]
@@ -59,6 +70,7 @@ pub async fn run_query(
                 started: false,
                 editability: None,
                 warnings,
+                read_only: false,
             });
         }
     }
@@ -78,6 +90,7 @@ pub async fn run_query(
         None
     };
 
+    let read_only = caps.sql && is_read_only(config.engine, &sql);
     let stream = handle.execute(sql.clone(), opts.unwrap_or_default());
     state.queries.lock().unwrap().insert(
         query_id.clone(),
@@ -93,6 +106,7 @@ pub async fn run_query(
         started: true,
         editability,
         warnings: Vec::new(),
+        read_only,
     })
 }
 
@@ -121,6 +135,7 @@ fn spawn_forwarder(
                     (
                         QueryEventBody::Error {
                             message: e.to_string(),
+                            position: e.position().cloned(),
                         },
                         true,
                     )

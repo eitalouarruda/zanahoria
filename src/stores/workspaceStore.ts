@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { ipc } from "../ipc/commands";
 import { useConnections } from "./connectionsStore";
+import { locateError, type ErrorLocation } from "../lib/errorPosition";
 import type {
   ColumnMeta,
   DbSchema,
@@ -27,10 +28,16 @@ export interface ResultState {
   affected: number | null;
   totalRows: number;
   error: string | null;
+  /** Dónde está el error en el editor, si el motor lo reporta. */
+  errorAt: ErrorLocation | null;
   /** SQL que se ejecutó (puede ser solo la selección del editor). */
   executedSql: string | null;
+  /** Offset de `executedSql` dentro del SQL del tab al ejecutar (null = desconocido). */
+  executedFrom: number | null;
   /** Safe Mode: warnings pendientes de confirmación para este SQL. */
   warnings: string[];
+  /** `executedSql` se puede re-ejecutar sin efectos (exportar todo). */
+  readOnly: boolean;
   /** Cambios pendientes del grid, por índice de fila. */
   changes: Record<number, RowChange>;
   /** Filas nuevas (insert) como mapa columna -> valor. */
@@ -115,11 +122,24 @@ function emptyResult(): ResultState {
     affected: null,
     totalRows: 0,
     error: null,
+    errorAt: null,
     executedSql: null,
+    executedFrom: null,
     warnings: [],
+    readOnly: false,
     changes: {},
     inserts: [],
   };
+}
+
+/**
+ * Offset de `sql` dentro de `doc`: el indicado si coincide; si no, la primera
+ * aparición (null si no está, p.ej. el texto cambió desde entonces).
+ */
+function locateExecuted(doc: string, sql: string, hint: number): number | null {
+  if (doc.slice(hint, hint + sql.length) === sql) return hint;
+  const idx = doc.indexOf(sql);
+  return idx === -1 ? null : idx;
 }
 
 let tabCounter = 0;
@@ -168,6 +188,8 @@ interface WorkspaceState {
     tabId: string,
     confirmDangerous?: boolean,
     sqlOverride?: string,
+    /** Offset de `sqlOverride` dentro del SQL del tab (ubica errores). */
+    sqlFrom?: number,
   ) => Promise<void>;
   cancelQuery: (wsId: string, tabId: string) => Promise<void>;
   fetchMore: (wsId: string, tabId: string) => Promise<void>;
@@ -354,14 +376,17 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
     );
   },
 
-  runQuery: async (wsId, tabId, confirmDangerous = false, sqlOverride) => {
+  runQuery: async (wsId, tabId, confirmDangerous = false, sqlOverride, sqlFrom) => {
     const ws = get().workspaces[wsId];
     const tab = findTab(ws, tabId);
     if (!ws || !tab) return;
     // Si hay texto seleccionado en el editor se ejecuta solo eso;
     // si no, todo el contenido del tab.
-    const sql = (sqlOverride ?? tab.sql).trim();
+    const raw = sqlOverride ?? tab.sql;
+    const sql = raw.trim();
     if (!sql) return;
+    const leading = raw.length - raw.trimStart().length;
+    const executedFrom = locateExecuted(tab.sql, sql, (sqlFrom ?? 0) + leading);
     if (tab.result.queryId) void ipc.cancelQuery(tab.result.queryId);
 
     // El queryId se genera aquí y se registra ANTES de invocar, para que los
@@ -370,7 +395,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
     set((s) =>
       updateTab(s, wsId, tabId, (t) => ({
         ...t,
-        result: { ...emptyResult(), queryId, running: true, executedSql: sql },
+        result: { ...emptyResult(), queryId, running: true, executedSql: sql, executedFrom },
       })),
     );
     try {
@@ -389,6 +414,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
             queryId: res.started ? queryId : null,
             editability: res.editability,
             warnings: res.warnings,
+            readOnly: res.readOnly,
             // si el Done ya llegó mientras esperábamos el invoke, no revivir
             running: res.started ? t.result.running : false,
           },
@@ -441,6 +467,10 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
           const r = { ...t.result };
           if (event.type === "error") {
             r.error = event.message;
+            r.errorAt =
+              event.position && r.executedSql
+                ? locateError(t.sql, r.executedSql, r.executedFrom, event.position)
+                : null;
             r.running = false;
           } else if (event.event.kind === "columns") {
             r.columns = event.event.columns;

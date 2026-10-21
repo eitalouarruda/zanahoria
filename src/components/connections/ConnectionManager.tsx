@@ -1,10 +1,12 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useConnections, groupNames, normalizeGroup } from "../../stores/connectionsStore";
 import { useWorkspaces } from "../../stores/workspaceStore";
 import { ipc, errorMessage } from "../../ipc/commands";
 import type { ConnectionConfig, SavedConnection } from "../../ipc/types";
 import ConnectionForm from "./ConnectionForm";
 import { useT } from "../../i18n";
+import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
+import { matchesConnection } from "../../lib/connectionFilter";
 
 const ENGINE_ICONS: Record<string, string> = {
   postgres: "🐘",
@@ -41,9 +43,67 @@ export default function ConnectionManager() {
   // el ref evita que ese blur vuelva a aplicar (o aplique tras Escape) el draft.
   const draftRef = useRef(groupDraft);
   draftRef.current = groupDraft;
+  // Filtro (Ctrl+F): null = cerrado. `selected` indexa `visible`.
+  const [filter, setFilter] = useState<string | null>(null);
+  const [selected, setSelected] = useState(0);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const keyFilter = useShortcutLabel("filterConnections");
 
   const groups = groupNames(saved, emptyGroups);
-  const ungrouped = saved.filter((c) => !normalizeGroup(c.group));
+  const filtering = filter !== null;
+  const shown = filtering ? saved.filter((c) => matchesConnection(c, filter)) : saved;
+  const membersOf = (group: string) => shown.filter((c) => normalizeGroup(c.group) === group);
+  const ungrouped = shown.filter((c) => !normalizeGroup(c.group));
+  // Conexiones en el orden en que se ven (para moverse con ↑/↓). Filtrando,
+  // los grupos se muestran expandidos y sin los que quedan vacíos.
+  const visible = filtering
+    ? [...groups.flatMap(membersOf), ...ungrouped]
+    : [];
+  const selectedId = visible[Math.min(selected, visible.length - 1)]?.id;
+
+  useShortcuts([
+    {
+      action: "filterConnections",
+      enabled: editing === null,
+      run: () => {
+        if (filter === null) setFilter("");
+        filterRef.current?.focus();
+        filterRef.current?.select();
+      },
+    },
+  ]);
+
+  // Mantener visible la tarjeta seleccionada.
+  useEffect(() => {
+    if (!selectedId) return;
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-conn-id="${CSS.escape(selectedId)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
+
+  const closeFilter = () => {
+    setFilter(null);
+    setSelected(0);
+  };
+
+  const onFilterKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (visible.length === 0) return;
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      const current = Math.min(selected, visible.length - 1);
+      setSelected((current + delta + visible.length) % visible.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const conn = visible.find((c) => c.id === selectedId);
+      if (conn && statuses[conn.id] !== "connecting") void openConnection(conn);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeFilter();
+    }
+  };
 
   const openConnection = async (conn: SavedConnection) => {
     setFailure(null);
@@ -118,7 +178,8 @@ export default function ConnectionManager() {
   const renderCard = (conn: SavedConnection) => (
     <div
       key={conn.id}
-      className="connection-card"
+      data-conn-id={conn.id}
+      className={`connection-card ${filtering && conn.id === selectedId ? "selected" : ""}`}
       onDoubleClick={() => void openConnection(conn)}
     >
       <span className="engine-icon">{ENGINE_ICONS[conn.engine]}</span>
@@ -180,6 +241,9 @@ export default function ConnectionManager() {
     <div className="connection-manager">
       <div className="cm-header">
         <h2>{t("conn.title")}</h2>
+        {!filtering && saved.length > 0 && keyFilter && (
+          <span className="dim filter-hint">{t("conn.filterHint", { key: keyFilter })}</span>
+        )}
         <button onClick={() => setGroupDraft({ from: "", value: "" })}>
           {t("conn.newGroup")}
         </button>
@@ -187,15 +251,33 @@ export default function ConnectionManager() {
           {t("conn.new")}
         </button>
       </div>
+      {filtering && (
+        <input
+          ref={filterRef}
+          className="connection-filter"
+          autoFocus
+          value={filter}
+          placeholder={t("conn.filterPlaceholder")}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            setSelected(0);
+          }}
+          onKeyDown={onFilterKey}
+        />
+      )}
       {failure && <div className="error-banner">{failure}</div>}
+      {filtering && visible.length === 0 && saved.length > 0 && (
+        <p className="dim">{t("conn.filterEmpty", { filter })}</p>
+      )}
       {saved.length === 0 && groups.length === 0 && groupDraft?.from !== "" && (
         <p className="dim">{t("conn.empty")}</p>
       )}
-      <div className="connection-list">
+      <div className="connection-list" ref={listRef}>
         {groupDraft?.from === "" && <div className="group-header">{draftInput}</div>}
         {groups.map((group) => {
-          const members = saved.filter((c) => normalizeGroup(c.group) === group);
-          const collapsed = collapsedGroups.includes(group);
+          const members = membersOf(group);
+          if (filtering && members.length === 0) return null;
+          const collapsed = !filtering && collapsedGroups.includes(group);
           return (
             <section key={group} className="connection-group">
               <div className="group-header">

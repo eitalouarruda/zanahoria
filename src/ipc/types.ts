@@ -67,7 +67,14 @@ export type QueryEvent =
   | { queryId: string; type: "exec"; event: { kind: "columns"; columns: ColumnMeta[] } }
   | { queryId: string; type: "exec"; event: { kind: "rows"; rows: Row[] } }
   | { queryId: string; type: "exec"; event: { kind: "done"; summary: ExecSummary } }
-  | { queryId: string; type: "error"; message: string };
+  | { queryId: string; type: "error"; message: string; position: ErrorPosition | null };
+
+/** Posición de un error dentro del SQL enviado (ver db-core `ErrorPosition`). */
+export type ErrorPosition =
+  /** Offset 0-based en caracteres (Postgres). */
+  | { kind: "offset"; offset: number }
+  /** Línea 1-based relativa al statement `statement` (0-based) del script (MySQL). */
+  | { kind: "line"; line: number; statement: number };
 
 export interface Editability {
   editable: boolean;
@@ -82,6 +89,8 @@ export interface RunQueryResponse {
   started: boolean;
   editability: Editability | null;
   warnings: string[];
+  /** La query se puede re-ejecutar sin efectos (exportar todas las filas). */
+  readOnly: boolean;
 }
 
 export interface Column {

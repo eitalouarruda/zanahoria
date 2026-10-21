@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ExportFormat, ExportOptions } from "../lib/export";
 import type {
   BackupOptions,
   RestoreOptions,
@@ -76,8 +77,24 @@ export const ipc = {
 
   saveTextFile: (path: string, content: string) =>
     invoke<void>("save_text_file", { path, content }),
-  saveXlsxFile: (path: string, columns: ColumnMeta[], rows: Row[]) =>
-    invoke<void>("save_xlsx_file", { path, columns, rows }),
+  /** Re-ejecuta la query (solo lectura) y exporta todas sus filas. Cancelable con cancelQuery(exportId). */
+  exportQuery: (args: {
+    exportId: string;
+    connId: string;
+    database: string;
+    sql: string;
+    format: ExportFormat;
+    path: string;
+    options: ExportOptions;
+  }) => invoke<{ rows: number }>("export_query", args),
+  /** Exporta filas ya cargadas (resultado completo). */
+  exportRows: (args: {
+    path: string;
+    format: ExportFormat;
+    columns: ColumnMeta[];
+    rows: Row[];
+    options: ExportOptions;
+  }) => invoke<{ rows: number }>("export_rows", args),
   kvGet: <T>(table: "settings" | "ui_state", key: string) =>
     invoke<T | null>("kv_get", { table, key }),
   kvSet: (table: "settings" | "ui_state", key: string, value: unknown) =>

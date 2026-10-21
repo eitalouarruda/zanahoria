@@ -32,7 +32,7 @@ tokio-util = "0.7"
 uuid = { version = "1", features = ["v4"] }
 db-core = { path = "crates/db-core" }
 app-store = { path = "crates/app-store" }
-rust_xlsxwriter = { version = "0.100.0", features = ["chrono"] }
+rust_xlsxwriter = { version = "0.100.0", features = ["chrono", "constant_memory"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]

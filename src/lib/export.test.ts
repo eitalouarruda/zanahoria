@@ -1,27 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ResultState } from "../stores/workspaceStore";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save: vi.fn() }));
 vi.mock("../ipc/commands", () => ({ ipc: {} }));
 
-const { buildExport } = await import("./export");
+const { exportPlan } = await import("./export");
 
-const columns = [
-  { name: "id", dbType: "int4" },
-  { name: "name", dbType: "text" },
-];
-const rows = [
-  [{ t: "int", v: 1 }, { t: "text", v: "a;b" }],
-  [{ t: "int", v: 2 }, { t: "null" }],
-] as const;
+const result = (over: Partial<ResultState>): ResultState =>
+  ({
+    rows: new Array(10_000).fill([]),
+    truncated: true,
+    running: false,
+    readOnly: true,
+    executedSql: "SELECT * FROM t",
+    ...over,
+  }) as ResultState;
 
-describe("buildExport csv", () => {
-  it("usa ; por defecto y entrecomilla valores que lo contienen", () => {
-    expect(buildExport("csv", columns, rows as never)).toBe('id;name\n1;"a;b"\n2;');
+describe("exportPlan", () => {
+  it("re-ejecuta las consultas de solo lectura aunque el grid esté truncado", () => {
+    expect(exportPlan(result({}))).toEqual({ mode: "query", sql: "SELECT * FROM t" });
   });
 
-  it("respeta el separador elegido", () => {
-    expect(buildExport("csv", columns, rows as never, undefined, { csvSeparator: "\t" })).toBe(
-      "id\tname\n1\ta;b\n2\t",
-    );
+  it("si no es de solo lectura usa las filas cargadas cuando están todas", () => {
+    expect(exportPlan(result({ readOnly: false, truncated: false }))).toEqual({
+      mode: "rows",
+      total: 10_000,
+    });
+  });
+
+  it("bloquea si no es de solo lectura y el resultado está incompleto", () => {
+    expect(exportPlan(result({ readOnly: false }))).toEqual({ mode: "blocked", loaded: 10_000 });
+    expect(exportPlan(result({ readOnly: false, truncated: false, running: true }))).toEqual({
+      mode: "blocked",
+      loaded: 10_000,
+    });
   });
 });

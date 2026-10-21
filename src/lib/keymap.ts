@@ -11,6 +11,7 @@ import type { MessageKey } from "../i18n";
 export type ActionId =
   | "openDatabase"
   | "newConnection"
+  | "filterConnections"
   | "nextWorkspace"
   | "prevWorkspace"
   | "closeWorkspace"
@@ -51,6 +52,7 @@ export interface ActionDef {
 export const ACTIONS: ActionDef[] = [
   { id: "openDatabase", group: "general", label: "action.openDatabase", defaults: ["Mod-k"] },
   { id: "newConnection", group: "general", label: "action.newConnection", defaults: ["Mod-n", "Mod-Shift-n"] },
+  { id: "filterConnections", group: "general", label: "action.filterConnections", defaults: ["Mod-f"] },
   { id: "nextWorkspace", group: "general", label: "action.nextWorkspace", defaults: ["Mod-Tab", "Mod-Shift-]", "Mod-Shift-}"] },
   { id: "prevWorkspace", group: "general", label: "action.prevWorkspace", defaults: ["Mod-Shift-Tab", "Mod-Shift-[", "Mod-Shift-{"] },
   { id: "closeWorkspace", group: "general", label: "action.closeWorkspace", defaults: ["Mod-Escape"] },

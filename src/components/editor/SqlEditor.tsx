@@ -33,6 +33,8 @@ import { useResolvedTheme } from "../../lib/theme";
 import { sqlTheme } from "./sqlTheme";
 import { sqlLanguage, completionRecencyTracker } from "./sqlCompletion";
 import { currentStatementHighlight, currentStatementText } from "./currentStatement";
+import { statementAt } from "./statements";
+import { errorMarker, setErrorMarker } from "./errorMarker";
 
 const DIALECTS: Record<Engine, SQLDialect> = {
   postgres: PostgreSQL,
@@ -45,6 +47,10 @@ const DIALECTS: Record<Engine, SQLDialect> = {
 export interface EditorApi {
   /** Texto seleccionado actualmente (vacío si no hay selección). */
   getSelection: () => string;
+  /** Offset donde empieza la selección actual. */
+  selectionFrom: () => number;
+  /** Mueve el cursor a `offset`, lo hace visible y enfoca el editor. */
+  goTo: (offset: number) => void;
   /** Lleva el foco al editor (cursor donde estaba). */
   focus: () => void;
 }
@@ -56,9 +62,11 @@ interface Props {
   onChange: (value: string) => void;
   /**
    * Ejecutar: recibe la selección o el statement bajo el cursor (Mod-Enter),
-   * undefined = todo el texto (Mod-Shift-Enter).
+   * undefined = todo el texto (Mod-Shift-Enter). `from` = offset de la selección.
    */
-  onRun: (selection?: string) => void;
+  onRun: (selection?: string, from?: number) => void;
+  /** Offset del último error de query a marcar (null = ninguno). */
+  errorAt?: number | null;
   apiRef?: React.MutableRefObject<EditorApi | null>;
 }
 
@@ -78,7 +86,7 @@ const baseKeymap = defaultKeymap.filter(
  */
 function actionKeymap(
   overrides: Partial<Record<ActionId, string[]>>,
-  onRun: () => (selection?: string) => void,
+  onRun: () => (selection?: string, from?: number) => void,
 ): KeyBinding[] {
   const bind = (action: ActionId, run: KeyBinding["run"]): KeyBinding[] =>
     keysFor(action, overrides)
@@ -87,8 +95,14 @@ function actionKeymap(
   return [
     // Selección o, si no hay, el statement bajo el cursor.
     ...bind("runCurrent", (view) => {
-      const text = selectedText(view) || currentStatementText(view);
-      if (text.trim()) onRun()(text);
+      const sel = selectedText(view);
+      if (sel) {
+        if (sel.trim()) onRun()(sel, view.state.selection.main.from);
+        return true;
+      }
+      const text = currentStatementText(view);
+      const range = statementAt(view.state.doc.toString(), view.state.selection.main.head);
+      if (text.trim()) onRun()(text, range?.from);
       return true;
     }),
     ...bind("runAll", () => {
@@ -129,7 +143,15 @@ function fontTheme(size: number) {
   });
 }
 
-export default function SqlEditor({ value, engine, schema, onChange, onRun, apiRef }: Props) {
+export default function SqlEditor({
+  value,
+  engine,
+  schema,
+  onChange,
+  onRun,
+  apiRef,
+  errorAt = null,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const langCompartment = useRef(new Compartment());
@@ -167,6 +189,7 @@ export default function SqlEditor({ value, engine, schema, onChange, onRun, apiR
         closeBrackets(),
         highlightSelectionMatches(),
         currentStatementHighlight,
+        errorMarker,
         autocompletion({ activateOnTypingDelay: 50, icons: true }),
         completionRecencyTracker,
         keysCompartment.current.of(
@@ -192,7 +215,16 @@ export default function SqlEditor({ value, engine, schema, onChange, onRun, apiR
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
     if (apiRef) {
-      apiRef.current = { getSelection: () => selectedText(view), focus: () => view.focus() };
+      apiRef.current = {
+        getSelection: () => selectedText(view),
+        selectionFrom: () => view.state.selection.main.from,
+        goTo: (offset) => {
+          const pos = Math.min(offset, view.state.doc.length);
+          view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+          view.focus();
+        },
+        focus: () => view.focus(),
+      };
     }
     return () => {
       view.destroy();
@@ -239,6 +271,20 @@ export default function SqlEditor({ value, engine, schema, onChange, onRun, apiR
       });
     }
   }, [value]);
+
+  // Marcar el error de la última ejecución (o limpiarlo).
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({ effects: setErrorMarker.of(errorAt) });
+    if (errorAt !== null) {
+      view.dispatch({
+        effects: EditorView.scrollIntoView(Math.min(errorAt, view.state.doc.length), {
+          y: "nearest",
+        }),
+      });
+    }
+  }, [errorAt]);
 
   return <div className="sql-editor" ref={containerRef} />;
 }

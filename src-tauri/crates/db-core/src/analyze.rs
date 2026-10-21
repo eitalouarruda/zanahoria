@@ -160,6 +160,55 @@ fn analyze_select(query: &Query, schema: &DbSchema) -> Editability {
 /// Detecta statements que modifican datos escritos a mano, para que Safe
 /// Mode pida confirmación explícita antes de ejecutar CUALQUIER mutación
 /// (UPDATE/DELETE/INSERT con o sin WHERE, TRUNCATE, DROP, ALTER).
+/// True si el script se puede volver a ejecutar sin efectos: todos sus
+/// statements se parsean y son consultas (SELECT/VALUES/TABLE/SHOW) sin
+/// `SELECT ... INTO` ni CTEs que modifiquen datos. Ante la duda, false.
+pub fn is_read_only(engine: Engine, sql: &str) -> bool {
+    if engine == Engine::Redis {
+        return false;
+    }
+    let dialect = dialect_for(engine);
+    let Ok(statements) = Parser::parse_sql(dialect.as_ref(), sql) else {
+        return false;
+    };
+    !statements.is_empty()
+        && statements.iter().all(|st| match st {
+            Statement::Query(q) => query_is_read_only(q),
+            Statement::ShowTables { .. }
+            | Statement::ShowColumns { .. }
+            | Statement::ShowVariable { .. }
+            | Statement::ShowVariables { .. }
+            | Statement::ShowCreate { .. }
+            | Statement::ShowFunctions { .. }
+            | Statement::ShowStatus { .. }
+            | Statement::ShowDatabases { .. }
+            | Statement::ShowSchemas { .. }
+            | Statement::ShowViews { .. }
+            | Statement::ShowCollation { .. } => true,
+            _ => false,
+        })
+}
+
+fn query_is_read_only(q: &Query) -> bool {
+    let ctes_ok = q
+        .with
+        .as_ref()
+        .is_none_or(|w| w.cte_tables.iter().all(|c| query_is_read_only(&c.query)));
+    ctes_ok && set_expr_is_read_only(&q.body)
+}
+
+fn set_expr_is_read_only(body: &SetExpr) -> bool {
+    match body {
+        SetExpr::Select(sel) => sel.into.is_none(),
+        SetExpr::Query(q) => query_is_read_only(q),
+        SetExpr::SetOperation { left, right, .. } => {
+            set_expr_is_read_only(left) && set_expr_is_read_only(right)
+        }
+        SetExpr::Values(_) | SetExpr::Table(_) => true,
+        SetExpr::Insert(_) | SetExpr::Update(_) => false,
+    }
+}
+
 pub fn dangerous_statements(engine: Engine, sql: &str) -> Vec<String> {
     let dialect = dialect_for(engine);
     let statements = match Parser::parse_sql(dialect.as_ref(), sql) {
@@ -212,6 +261,24 @@ fn direct_column(expr: &Expr) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_only_only_for_pure_queries() {
+        let pg = Engine::Postgres;
+        assert!(is_read_only(pg, "SELECT * FROM t WHERE id > 3"));
+        assert!(is_read_only(pg, "SELECT 1; SELECT 2 UNION SELECT 3"));
+        assert!(is_read_only(pg, "WITH x AS (SELECT 1) SELECT * FROM x"));
+        assert!(!is_read_only(pg, "UPDATE t SET a = 1 RETURNING *"));
+        assert!(!is_read_only(pg, "INSERT INTO t VALUES (1) RETURNING id"));
+        assert!(!is_read_only(pg, "SELECT * INTO copia FROM t"));
+        assert!(!is_read_only(pg, "SELECT 1; DELETE FROM t"));
+        assert!(!is_read_only(
+            pg,
+            "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d"
+        ));
+        assert!(!is_read_only(pg, "SELEC mal escrito"));
+        assert!(is_read_only(Engine::Mysql, "SHOW TABLES"));
+    }
     use crate::schema::{Column, Namespace, Table, TableKind};
 
     fn schema() -> DbSchema {

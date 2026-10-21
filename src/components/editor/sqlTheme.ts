@@ -86,6 +86,12 @@ function editorTheme(mode: ResolvedTheme, p: Palette) {
       ".cm-activeLine": { backgroundColor: p.activeLine },
       ".cm-activeLineGutter": { backgroundColor: "transparent", color: p.text },
       ".cm-current-statement": { backgroundColor: p.currentStatement },
+      ".cm-error-line": { backgroundColor: "rgba(224, 82, 82, 0.12)" },
+      ".cm-error-mark": {
+        textDecoration: "underline wavy var(--red)",
+        textDecorationSkipInk: "none",
+        textUnderlineOffset: "3px",
+      },
       ".cm-matchingBracket": {
         backgroundColor: "rgba(82, 155, 216, 0.25)",
         outline: "1px solid rgba(82, 155, 216, 0.5)",

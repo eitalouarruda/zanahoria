@@ -15,8 +15,10 @@ import type { Engine, FavoriteQuery, MutationPreview } from "../../ipc/types";
 import { beautify, uglify } from "../../lib/format";
 import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
 import { useT, type MessageKey } from "../../i18n";
+import { listen } from "@tauri-apps/api/event";
 import {
   DEFAULT_CSV_SEPARATOR,
+  exportPlan,
   exportResult,
   type ExportFormat,
   type ExportOptions,
@@ -72,8 +74,14 @@ export default function WorkspaceView({ workspace }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [favName, setFavName] = useState<string | null>(null);
   const [showBackup, setShowBackup] = useState(false);
-  /** Diálogo de exportación CSV: separador elegido (null = cerrado). */
-  const [csvExport, setCsvExport] = useState<{ choice: string; custom: string } | null>(null);
+  /** Diálogo de exportación: formato y, para CSV, separador elegido (null = cerrado). */
+  const [exportDialog, setExportDialog] = useState<{
+    format: ExportFormat;
+    choice: string;
+    custom: string;
+  } | null>(null);
+  /** Exportación en curso: id (para cancelar) y filas escritas hasta ahora. */
+  const [exporting, setExporting] = useState<{ id: string; rows: number } | null>(null);
   const [backupSupported, setBackupSupported] = useState(false);
   const editorApi = useRef<EditorApi | null>(null);
   const splitApi = useRef<EditorApi | null>(null);
@@ -120,10 +128,17 @@ export default function WorkspaceView({ workspace }: Props) {
   const [shownRows, setShownRows] = useState<Record<string, number | null>>({});
 
   /** Ejecuta en el panel: la selección de su editor si la hay; si no, todo su texto. */
-  const run = (p: QueryTab, confirmDangerous = false, selection?: string) => {
-    const sel = selection ?? apiFor(p).current?.getSelection();
-    void ws.runQuery(wsId, p.id, confirmDangerous, sel || undefined);
+  const run = (p: QueryTab, confirmDangerous = false, selection?: string, from?: number) => {
+    const api = apiFor(p).current;
+    const sel = selection ?? api?.getSelection();
+    const selFrom = selection !== undefined ? from : api?.selectionFrom();
+    void ws.runQuery(wsId, p.id, confirmDangerous, sel || undefined, sel ? selFrom : undefined);
   };
+  /** Repite lo último ejecutado en el panel (o todo su editor). */
+  const rerun = (p: QueryTab, confirmDangerous = false) =>
+    p.result.executedSql
+      ? run(p, confirmDangerous, p.result.executedSql, p.result.executedFrom ?? undefined)
+      : run(p, confirmDangerous, p.sql, 0);
 
   useEffect(() => {
     void ipc
@@ -142,7 +157,7 @@ export default function WorkspaceView({ workspace }: Props) {
     ws.setActiveTab(wsId, tabs[(idx + delta + tabs.length) % tabs.length].id);
   };
   const modalOpen =
-    preview !== null || favName !== null || showBackup || showDbPicker || csvExport !== null;
+    preview !== null || favName !== null || showBackup || showDbPicker || exportDialog !== null;
 
   /** Split: cambia el panel activo y lleva el foco a su editor. */
   const focusPane = (split: boolean) => {
@@ -166,7 +181,7 @@ export default function WorkspaceView({ workspace }: Props) {
       setFavName(null);
       setShowBackup(false);
       setShowDbPicker(false);
-      setCsvExport(null);
+      setExportDialog(null);
     } },
     { action: "newTab", run: () => ws.addTab(wsId) },
     // Sin tabs abiertos, Ctrl+W cierra la conexión (como Ctrl+Esc).
@@ -178,7 +193,7 @@ export default function WorkspaceView({ workspace }: Props) {
     { action: "prevTab", run: () => cycleTab(-1) },
     // Reload: repite la última query ejecutada del panel (o todo su editor).
     { action: "reload", enabled: !!pane && !pane.result.running, run: () =>
-      pane && run(pane, false, pane.result.executedSql ?? pane.sql) },
+      pane && rerun(pane) },
     { action: "previewChanges", enabled: pendingCount > 0, run: () => void showPreview(pane) },
     // Con el Code Review abierto, Ctrl+S / Ctrl+Enter confirman el commit.
     { keys: ["Mod-Enter"], enabled: preview !== null && !applying, run: () =>
@@ -285,17 +300,48 @@ export default function WorkspaceView({ workspace }: Props) {
     setNotice(t("ws.noticeFavorite"));
   };
 
+  const openExport = (format: ExportFormat) =>
+    setExportDialog({ format, choice: DEFAULT_CSV_SEPARATOR, custom: "" });
+
+  /** Exporta TODO el resultado de la consulta del panel (ver `exportPlan`). */
   const doExport = async (format: ExportFormat, options: ExportOptions = {}) => {
-    if (!pane) return;
-    const ok = await exportResult(
-      format,
-      pane.result.columns,
-      pane.result.rows,
-      pane.result.editability?.table ?? undefined,
-      options,
-    );
-    if (ok) setNotice(t("ws.noticeExported", { format: format.toUpperCase() }));
+    if (!pane || exporting) return;
+    const exportId = crypto.randomUUID();
+    try {
+      const rows = await exportResult(
+        format,
+        {
+          connId,
+          database,
+          result: pane.result,
+          exportId,
+          onStart: () => setExporting({ id: exportId, rows: 0 }),
+        },
+        { ...options, tableName: pane.result.editability?.table ?? undefined },
+      );
+      if (rows !== null) {
+        setNotice(t("ws.noticeExported", { format: format.toUpperCase(), n: rows }));
+      }
+    } catch (e) {
+      setNotice(errorMessage(e));
+    } finally {
+      setExporting(null);
+    }
   };
+
+  // Progreso de la exportación en curso (filas escritas).
+  useEffect(() => {
+    if (!exporting) return;
+    const id = exporting.id;
+    const unlisten = listen<{ exportId: string; rows: number }>("export:progress", (e) => {
+      if (e.payload.exportId === id) {
+        setExporting((cur) => (cur?.id === id ? { id, rows: e.payload.rows } : cur));
+      }
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [exporting?.id]);
 
   /** Columna de un panel: su editor arriba y su grid de resultados abajo. */
   const renderColumn = (p: QueryTab, isSplit: boolean) => {
@@ -322,8 +368,11 @@ export default function WorkspaceView({ workspace }: Props) {
                 engine={engine}
                 schema={schema}
                 onChange={(sql) => ws.setTabSql(wsId, p.id, sql)}
-                onRun={(selection) => run(p, false, selection ?? p.sql)}
+                onRun={(selection, from) =>
+                  selection === undefined ? run(p, false, p.sql, 0) : run(p, false, selection, from)
+                }
                 apiRef={isSplit ? splitApi : editorApi}
+                errorAt={p.result.errorAt?.offset ?? null}
               />
             </div>
           </Panel>
@@ -379,13 +428,38 @@ export default function WorkspaceView({ workspace }: Props) {
                   <strong>{t("ws.safeWarning")}</strong> {p.result.warnings.join("; ")}
                   <button
                     className="danger"
-                    onClick={() => run(p, true, p.result.executedSql ?? undefined)}
+                    onClick={() => rerun(p, true)}
                   >
                     {t("ws.runAnyway")}
                   </button>
                 </div>
               )}
-              {p.result.error && <div className="error-banner">{p.result.error}</div>}
+              {p.result.error && (
+                <div className="error-banner">
+                  {p.result.error}
+                  {p.result.errorAt && (
+                    <button
+                      className="error-location"
+                      disabled={p.result.errorAt.offset === null}
+                      onClick={() => {
+                        const offset = p.result.errorAt?.offset;
+                        if (offset != null) apiFor(p).current?.goTo(offset);
+                      }}
+                      title={p.result.errorAt.offset === null ? t("ws.errorAtStale") : undefined}
+                    >
+                      {t("ws.errorAt", { line: p.result.errorAt.line, col: p.result.errorAt.col })}
+                    </button>
+                  )}
+                </div>
+              )}
+              {exporting && p.id === pane?.id && (
+                <div className="notice-banner exporting">
+                  {t("export.progress", { n: exporting.rows.toLocaleString() })}
+                  <button onClick={() => void ipc.cancelQuery(exporting.id)}>
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              )}
               {notice && p.id === pane?.id && (
                 <div className="notice-banner" onClick={() => setNotice(null)}>
                   {notice}
@@ -566,14 +640,15 @@ export default function WorkspaceView({ workspace }: Props) {
                 <span className="spacer" />
                 {pane.result.rows.length > 0 && (
                   <>
-                    <button
-                      onClick={() => setCsvExport({ choice: DEFAULT_CSV_SEPARATOR, custom: "" })}
-                    >
-                      CSV
-                    </button>
-                    <button onClick={() => void doExport("xlsx")}>XLSX</button>
-                    <button onClick={() => void doExport("json")}>JSON</button>
-                    <button onClick={() => void doExport("sql")}>SQL</button>
+                    {(["csv", "xlsx", "json", "sql"] as const).map((format) => (
+                      <button
+                        key={format}
+                        disabled={exporting !== null}
+                        onClick={() => openExport(format)}
+                      >
+                        {format.toUpperCase()}
+                      </button>
+                    ))}
                   </>
                 )}
               </div>
@@ -634,51 +709,73 @@ export default function WorkspaceView({ workspace }: Props) {
           onClose={() => setShowDbPicker(false)}
         />
       )}
-      {csvExport !== null && pane && (() => {
-        const separator = csvExport.choice === "custom" ? csvExport.custom : csvExport.choice;
+      {exportDialog !== null && pane && (() => {
+        const { format } = exportDialog;
+        const plan = exportPlan(pane.result);
+        const separator =
+          exportDialog.choice === "custom" ? exportDialog.custom : exportDialog.choice;
+        const canExport = plan.mode !== "blocked" && (format !== "csv" || !!separator);
         const confirm = () => {
-          if (!separator) return;
-          setCsvExport(null);
-          void doExport("csv", { csvSeparator: separator });
+          if (!canExport) return;
+          setExportDialog(null);
+          void doExport(format, format === "csv" ? { csvSeparator: separator } : {});
         };
         return (
-          <div className="modal-backdrop" onClick={() => setCsvExport(null)}>
+          <div className="modal-backdrop" onClick={() => setExportDialog(null)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <h3>{t("export.csvTitle")}</h3>
-              <label className="csv-separator">
-                {t("export.separator")}
-                <select
-                  autoFocus
-                  value={csvExport.choice}
-                  onChange={(e) => setCsvExport({ ...csvExport, choice: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") confirm();
-                  }}
-                >
-                  {CSV_SEPARATORS.map((sep) => (
-                    <option key={sep.value} value={sep.value}>
-                      {t(sep.label)}
-                    </option>
-                  ))}
-                  <option value="custom">{t("export.sepCustom")}</option>
-                </select>
-                {csvExport.choice === "custom" && (
-                  <input
+              <h3>{t("export.title", { format: format.toUpperCase() })}</h3>
+              <p className={plan.mode === "blocked" ? "export-warning blocked" : "export-warning"}>
+                {plan.mode === "query"
+                  ? t("export.allRowsQuery")
+                  : plan.mode === "rows"
+                    ? t("export.allRowsLoaded", { n: plan.total.toLocaleString() })
+                    : t("export.blocked", { n: plan.loaded.toLocaleString() })}
+              </p>
+              {format === "csv" && plan.mode !== "blocked" && (
+                <label className="csv-separator">
+                  {t("export.separator")}
+                  <select
                     autoFocus
-                    maxLength={5}
-                    value={csvExport.custom}
-                    onChange={(e) => setCsvExport({ ...csvExport, custom: e.target.value })}
+                    value={exportDialog.choice}
+                    onChange={(e) => setExportDialog({ ...exportDialog, choice: e.target.value })}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") confirm();
                     }}
-                  />
-                )}
-              </label>
+                  >
+                    {CSV_SEPARATORS.map((sep) => (
+                      <option key={sep.value} value={sep.value}>
+                        {t(sep.label)}
+                      </option>
+                    ))}
+                    <option value="custom">{t("export.sepCustom")}</option>
+                  </select>
+                  {exportDialog.choice === "custom" && (
+                    <input
+                      autoFocus
+                      maxLength={5}
+                      value={exportDialog.custom}
+                      onChange={(e) => setExportDialog({ ...exportDialog, custom: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirm();
+                      }}
+                    />
+                  )}
+                </label>
+              )}
               <div className="modal-actions">
-                <button onClick={() => setCsvExport(null)}>{t("common.cancel")}</button>
-                <button className="primary" disabled={!separator} onClick={confirm}>
-                  {t("export.export")}
+                <button onClick={() => setExportDialog(null)}>
+                  {plan.mode === "blocked" ? t("common.close") : t("common.cancel")}
                 </button>
+                {plan.mode !== "blocked" && (
+                  <button
+                    className="primary"
+                    autoFocus={format !== "csv"}
+                    disabled={!canExport}
+                    onClick={confirm}
+                  >
+                    {t("export.export")}
+                  </button>
+                )}
               </div>
             </div>
           </div>
