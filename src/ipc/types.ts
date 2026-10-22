@@ -77,12 +77,33 @@ export type ErrorPosition =
   | { kind: "line"; line: number; statement: number };
 
 export interface Editability {
+  /** Hay al menos una tabla editable. */
   editable: boolean;
   reason: string | null;
+  /** Tablas reales del FROM/JOIN, en orden de aparición. */
+  targets: EditTarget[];
+  /** Una entrada por columna del resultado, en el mismo orden. */
+  columns: ResultColumn[];
+  /** Tabla sobre la que se pueden insertar/borrar filas (sólo sin JOIN). */
+  rowTarget: number | null;
+}
+
+export interface EditTarget {
   namespace: string | null;
-  table: string | null;
+  table: string;
+  alias: string | null;
   pkColumns: string[];
-  columnSources: Record<string, string>;
+  /** Índice en el resultado de cada columna de `pkColumns`. */
+  pkIndexes: number[];
+  editable: boolean;
+  reason: string | null;
+}
+
+export interface ResultColumn {
+  /** Nombre esperado (null = expresión, no se comprueba). */
+  name: string | null;
+  /** Columna real de la que viene (null = read-only). */
+  source: { target: number; column: string } | null;
 }
 
 export interface RunQueryResponse {
@@ -120,6 +141,8 @@ export type ChangeKind = "update" | "delete" | "insert";
 
 export interface PendingChange {
   kind: ChangeKind;
+  /** Índice en `Editability.targets`. */
+  target: number;
   pk: Record<string, DbValue>;
   values: Record<string, DbValue>;
   oldValues: Record<string, DbValue>;

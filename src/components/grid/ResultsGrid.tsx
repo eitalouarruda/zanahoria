@@ -4,7 +4,16 @@ import type { DbValue } from "../../ipc/types";
 import { dbValueToDisplay, displayToDbValue } from "../../ipc/types";
 import { useWorkspaces, type QueryTab } from "../../stores/workspaceStore";
 import { useT } from "../../i18n";
-import { computeRowView, type GridSort } from "../../lib/gridView";
+import { columnKeys, computeRowView, type GridSort } from "../../lib/gridView";
+import {
+  editedCells,
+  editedValue,
+  editableSource,
+  isCellEditable,
+  isInsertCellEditable,
+  pkValues,
+  rowKey,
+} from "../../lib/editing";
 
 interface Props {
   /** Id del workspace en el store. */
@@ -52,6 +61,14 @@ export default function ResultsGrid({
   useEffect(() => setSort(null), [tab.id]);
 
   const { columns, rows, editability, changes, inserts } = tab.result;
+  // Claves únicas: una query puede devolver nombres repetidos (`SELECT id, *`).
+  const keys = useMemo(() => columnKeys(columns), [columns]);
+  // Ediciones por fila real: con JOIN, la misma fila de una tabla puede salir
+  // en varias filas del resultado y todas deben mostrar el valor editado.
+  const edited = useMemo(
+    () => editedCells(editability, rows, changes),
+    [editability, rows, changes],
+  );
 
   // Orden y ancho de columnas: sólo para la vista actual (no se guardan).
   // Se reinician al cambiar de tab o cuando la query devuelve otras columnas.
@@ -212,27 +229,34 @@ export default function ResultsGrid({
 
   if (columns.length === 0) return null;
 
-  const isColEditable = (colName: string) =>
-    editability?.editable && editability.columnSources[colName] != null;
+  const cellEditable = (rowIndex: number, colIndex: number) =>
+    rowIndex >= rows.length
+      ? isInsertCellEditable(editability, colIndex)
+      : isCellEditable(editability, rows[rowIndex], colIndex);
+
+  /** Por qué la columna no se puede editar (tooltip), si se sabe. */
+  const readOnlyReason = (colIndex: number): string | undefined => {
+    if (!editability) return undefined;
+    if (!editability.editable) return editability.reason ?? undefined;
+    const src = editability.columns[colIndex]?.source;
+    return (src && editability.targets[src.target]?.reason) || undefined;
+  };
 
   const cellValue = (rowIndex: number, colIndex: number): DbValue => {
-    const colName = columns[colIndex].name;
     if (rowIndex >= rows.length) {
-      return inserts[rowIndex - rows.length]?.[colName] ?? { t: "null" };
+      return inserts[rowIndex - rows.length]?.[colIndex] ?? { t: "null" };
     }
     const change = changes[rowIndex];
-    if (change?.kind === "update" && colName in change.values) {
-      return change.values[colName];
+    if (change?.kind === "update" && colIndex in change.values) {
+      return change.values[colIndex];
     }
-    return rows[rowIndex][colIndex];
+    return editedValue(editability, edited, rows[rowIndex], colIndex) ?? rows[rowIndex][colIndex];
   };
 
   /** `typed`: edición iniciada escribiendo; esa tecla reemplaza el valor. */
   const startEdit = (rowIndex: number, colIndex: number, typed?: string) => {
-    const colName = columns[colIndex].name;
     const insert = rowIndex >= rows.length;
-    if (!insert && !isColEditable(colName)) return;
-    if (insert && !editability?.editable) return;
+    if (!cellEditable(rowIndex, colIndex)) return;
     const v = cellValue(rowIndex, colIndex);
     setEditing({
       row: rowIndex,
@@ -245,21 +269,43 @@ export default function ResultsGrid({
 
   const commitEdit = () => {
     if (!editing) return;
-    const colName = columns[editing.col].name;
     if (editing.insert) {
       const insertIndex = editing.row - rows.length;
-      const original = inserts[insertIndex]?.[colName] ?? { t: "text", v: "" };
+      const original = inserts[insertIndex]?.[editing.col] ?? { t: "text", v: "" };
       editInsertCell(wsId,
         tab.id,
         insertIndex,
-        colName,
+        editing.col,
         displayToDbValue(editing.text, original),
       );
     } else {
       const original = rows[editing.row][editing.col];
       const newValue = displayToDbValue(editing.text, original);
       if (JSON.stringify(newValue) !== JSON.stringify(cellValue(editing.row, editing.col))) {
-        editCell(wsId, tab.id, editing.row, colName, newValue, original);
+        editCell(wsId, tab.id, editing.row, editing.col, newValue, original);
+        // Otras filas que ya editaron la misma celda real: mismo valor, así
+        // no quedan dos ediciones en conflicto.
+        const src = editableSource(editability, editing.col);
+        const pk = src && pkValues(editability!, src.target, rows[editing.row]);
+        if (src && pk) {
+          const key = rowKey(src.target, pk);
+          for (const [rowStr, change] of Object.entries(changes)) {
+            const r = Number(rowStr);
+            if (r === editing.row || change.kind !== "update") continue;
+            for (const colStr of Object.keys(change.values)) {
+              const c = Number(colStr);
+              const other = editableSource(editability, c);
+              const otherPk = other && pkValues(editability!, other.target, rows[r]);
+              if (
+                other?.column === src.column &&
+                otherPk &&
+                rowKey(other.target, otherPk) === key
+              ) {
+                editCell(wsId, tab.id, r, c, newValue, rows[r][c]);
+              }
+            }
+          }
+        }
       }
     }
     setEditing(null);
@@ -363,7 +409,7 @@ export default function ResultsGrid({
               const c = columns[colIndex];
               return (
               <th
-                key={c.name}
+                key={keys[colIndex]}
                 data-col={colIndex}
                 className={[
                   "sortable",
@@ -376,14 +422,20 @@ export default function ResultsGrid({
                 title={`${c.dbType} — ${t("grid.sortTitle")}`}
                 onMouseDown={(e) => startMove(e, colIndex)}
                 onClick={() => {
-                  if (!suppressClick.current) toggleSort(c.name);
+                  if (!suppressClick.current) toggleSort(keys[colIndex]);
                 }}
               >
                 {c.name}
-                {editability?.pkColumns.includes(
-                  editability.columnSources[c.name] ?? "",
-                ) && <span className="pk-badge">PK</span>}
-                {sort?.col === c.name && (
+                {(() => {
+                  const src = editability?.columns[colIndex]?.source;
+                  return (
+                    src &&
+                    editability?.targets[src.target]?.pkColumns.includes(src.column) && (
+                      <span className="pk-badge">PK</span>
+                    )
+                  );
+                })()}
+                {sort?.col === keys[colIndex] && (
                   <span className="sort-indicator">{sort.dir === "asc" ? "▲" : "▼"}</span>
                 )}
                 <span
@@ -403,13 +455,13 @@ export default function ResultsGrid({
           {rowFilters && (
             <tr className="filter-row">
               <th className="row-actions-header" />
-              {visibleCols.map((colIndex) => columns[colIndex]).map((c, pos) => (
-                <th key={c.name} style={widthStyle(visibleCols[pos])}>
+              {visibleCols.map((colIndex) => (
+                <th key={keys[colIndex]} style={widthStyle(colIndex)}>
                   <input
-                    value={rowFilters[c.name] ?? ""}
+                    value={rowFilters[keys[colIndex]] ?? ""}
                     placeholder={t("grid.rowFilterPlaceholder")}
                     title={t("grid.rowFilterTitle")}
-                    onChange={(e) => onRowFilterChange?.(c.name, e.target.value)}
+                    onChange={(e) => onRowFilterChange?.(keys[colIndex], e.target.value)}
                     // Que las teclas no lleguen a la navegación del grid.
                     onKeyDown={(e) => e.stopPropagation()}
                   />
@@ -438,7 +490,7 @@ export default function ResultsGrid({
                 }}
               >
                 <td className="row-actions">
-                  {editability?.editable &&
+                  {editability?.rowTarget != null &&
                     (isInsert ? (
                       <button
                         title={t("grid.removeNewRow")}
@@ -456,23 +508,24 @@ export default function ResultsGrid({
                     ))}
                 </td>
                 {visibleCols.map((colIndex) => {
-                  const c = columns[colIndex];
                   const isEditing =
                     editing?.row === rowIndex && editing.col === colIndex;
                   const isSelected =
                     cursor?.row === rowIndex && cursor.col === colIndex;
                   const v = cellValue(rowIndex, colIndex);
-                  const changed =
-                    (change?.kind === "update" && c.name in change.values) ||
-                    (isInsert && v.t !== "null");
+                  const changed = isInsert
+                    ? v.t !== "null"
+                    : (change?.kind === "update" && colIndex in change.values) ||
+                      editedValue(editability, edited, rows[rowIndex], colIndex) !== undefined;
+                  const editable = cellEditable(rowIndex, colIndex);
                   return (
                     <td
-                      key={c.name}
+                      key={keys[colIndex]}
                       style={widthStyle(colIndex)}
                       className={[
                         v.t === "null" ? "cell-null" : "",
                         changed ? "cell-changed" : "",
-                        isColEditable(c.name) || isInsert ? "cell-editable" : "",
+                        editable ? "cell-editable" : "",
                         isSelected ? "cell-selected" : "",
                       ].join(" ")}
                       data-row={rowIndex}
@@ -481,11 +534,7 @@ export default function ResultsGrid({
                         if (!isEditing) setCursor({ row: rowIndex, col: colIndex });
                       }}
                       onDoubleClick={() => startEdit(rowIndex, colIndex)}
-                      title={
-                        !editability?.editable && editability?.reason
-                          ? editability.reason
-                          : undefined
-                      }
+                      title={editable ? undefined : readOnlyReason(colIndex)}
                     >
                       {isEditing ? (
                         <input

@@ -1,7 +1,20 @@
 import type { ColumnMeta, DbValue, Row } from "../ipc/types";
 import { dbValueToDisplay } from "../ipc/types";
 
-/** Orden del grid: columna (por nombre) y sentido. */
+/**
+ * Clave única de cada columna: su nombre y, si se repite (p. ej. `SELECT id, *`),
+ * `nombre#2`, `nombre#3`… La primera aparición conserva el nombre tal cual.
+ */
+export function columnKeys(columns: ColumnMeta[]): string[] {
+  const seen = new Map<string, number>();
+  return columns.map((c) => {
+    const n = (seen.get(c.name) ?? 0) + 1;
+    seen.set(c.name, n);
+    return n === 1 ? c.name : `${c.name}#${n}`;
+  });
+}
+
+/** Orden del grid: columna (por clave, ver `columnKeys`) y sentido. */
 export interface GridSort {
   col: string;
   dir: "asc" | "desc";
@@ -89,7 +102,7 @@ export function parseRowFilter(text: string): ((v: DbValue) => boolean) | null {
 
 /**
  * Índices de `rows` que quedan tras filtrar y ordenar. Los filtros y el orden
- * se refieren a columnas por nombre; los que no existen se ignoran.
+ * se refieren a columnas por clave (`columnKeys`); los que no existen se ignoran.
  */
 export function computeRowView(
   columns: ColumnMeta[],
@@ -97,7 +110,8 @@ export function computeRowView(
   filters: Record<string, string>,
   sort: GridSort | null,
 ): number[] {
-  const colIndex = (name: string) => columns.findIndex((c) => c.name === name);
+  const keys = columnKeys(columns);
+  const colIndex = (key: string) => keys.indexOf(key);
   const preds: { col: number; test: (v: DbValue) => boolean }[] = [];
   for (const [name, text] of Object.entries(filters)) {
     const col = colIndex(name);

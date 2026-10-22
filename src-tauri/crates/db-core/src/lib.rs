@@ -12,7 +12,10 @@ pub mod pool;
 pub mod schema;
 pub mod value;
 
-pub use analyze::{analyze_query, dangerous_statements, is_read_only, Editability};
+pub use analyze::{
+    analyze_query, dangerous_statements, is_read_only, ColumnSource, EditTarget, Editability,
+    ResultColumn,
+};
 pub use config::{ConnectionConfig, Engine};
 pub use driver::{
     Capabilities, ExecEvent, ExecOpts, ExecSummary, MutationResult, MutationStatement, QueryStream,

@@ -13,6 +13,7 @@ import {
 import { ipc, errorMessage } from "../../ipc/commands";
 import type { Engine, FavoriteQuery, MutationPreview } from "../../ipc/types";
 import { beautify, uglify } from "../../lib/format";
+import { exportTableName } from "../../lib/editing";
 import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
 import { useT, type MessageKey } from "../../i18n";
 import { listen } from "@tauri-apps/api/event";
@@ -317,7 +318,7 @@ export default function WorkspaceView({ workspace }: Props) {
           exportId,
           onStart: () => setExporting({ id: exportId, rows: 0 }),
         },
-        { ...options, tableName: pane.result.editability?.table ?? undefined },
+        { ...options, tableName: exportTableName(pane.result.editability) },
       );
       if (rows !== null) {
         setNotice(t("ws.noticeExported", { format: format.toUpperCase(), n: rows }));
@@ -496,7 +497,9 @@ export default function WorkspaceView({ workspace }: Props) {
                   )}
                 {p.result.editability?.editable && (
                   <>
-                    <button onClick={() => ws.addInsertRow(wsId, p.id)}>{t("ws.addRow")}</button>
+                    {p.result.editability.rowTarget != null && (
+                      <button onClick={() => ws.addInsertRow(wsId, p.id)}>{t("ws.addRow")}</button>
+                    )}
                     {pending > 0 && (
                       <>
                         <span className="pending-badge">{t("ws.changes", { n: pending })}</span>

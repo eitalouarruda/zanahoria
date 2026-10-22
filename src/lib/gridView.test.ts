@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ColumnMeta, DbValue, Row } from "../ipc/types";
-import { computeRowView, parseRowFilter } from "./gridView";
+import { columnKeys, computeRowView, parseRowFilter } from "./gridView";
 
 const int = (v: number): DbValue => ({ t: "int", v });
 const text = (v: string): DbValue => ({ t: "text", v });
@@ -63,5 +63,19 @@ describe("computeRowView", () => {
     expect(
       computeRowView(columns, rows, { id: ">2", nope: "x" }, { col: "id", dir: "desc" }),
     ).toEqual([1, 0]);
+  });
+
+  it("distingue columnas con el mismo nombre (SELECT id, *)", () => {
+    const dup: ColumnMeta[] = [
+      { name: "id", dbType: "int4" },
+      { name: "id", dbType: "int4" },
+    ];
+    const r: Row[] = [
+      [int(1), int(20)],
+      [int(2), int(10)],
+    ];
+    expect(columnKeys(dup)).toEqual(["id", "id#2"]);
+    expect(computeRowView(dup, r, { "id#2": "=10" }, null)).toEqual([1]);
+    expect(computeRowView(dup, r, {}, { col: "id#2", dir: "asc" })).toEqual([1, 0]);
   });
 });

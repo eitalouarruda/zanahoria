@@ -2,6 +2,12 @@ import { create } from "zustand";
 import { ipc } from "../ipc/commands";
 import { useConnections } from "./connectionsStore";
 import { locateError, type ErrorLocation } from "../lib/errorPosition";
+import {
+  buildPendingChanges,
+  checkEditability,
+  type InsertRow,
+  type RowChange,
+} from "../lib/editing";
 import type {
   ColumnMeta,
   DbSchema,
@@ -12,11 +18,7 @@ import type {
   Row,
 } from "../ipc/types";
 
-export interface RowChange {
-  kind: "update" | "delete";
-  values: Record<string, DbValue>;
-  oldValues: Record<string, DbValue>;
-}
+export type { RowChange } from "../lib/editing";
 
 export interface ResultState {
   queryId: string | null;
@@ -40,8 +42,8 @@ export interface ResultState {
   readOnly: boolean;
   /** Cambios pendientes del grid, por índice de fila. */
   changes: Record<number, RowChange>;
-  /** Filas nuevas (insert) como mapa columna -> valor. */
-  inserts: Record<string, DbValue>[];
+  /** Filas nuevas (insert) como mapa índice de columna -> valor. */
+  inserts: InsertRow[];
 }
 
 export interface QueryTab {
@@ -199,7 +201,8 @@ interface WorkspaceState {
     wsId: string,
     tabId: string,
     rowIndex: number,
-    column: string,
+    /** Índice de la columna en el resultado. */
+    column: number,
     value: DbValue,
     oldValue: DbValue,
   ) => void;
@@ -209,7 +212,8 @@ interface WorkspaceState {
     wsId: string,
     tabId: string,
     insertIndex: number,
-    column: string,
+    /** Índice de la columna en el resultado. */
+    column: number,
     value: DbValue,
   ) => void;
   removeInsertRow: (wsId: string, tabId: string, insertIndex: number) => void;
@@ -412,7 +416,8 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
           result: {
             ...t.result,
             queryId: res.started ? queryId : null,
-            editability: res.editability,
+            // Si las columnas ya llegaron, comprobar que cuadran con el análisis.
+            editability: checkEditability(res.editability, t.result.columns),
             warnings: res.warnings,
             readOnly: res.readOnly,
             // si el Done ya llegó mientras esperábamos el invoke, no revivir
@@ -474,6 +479,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
             r.running = false;
           } else if (event.event.kind === "columns") {
             r.columns = event.event.columns;
+            r.editability = checkEditability(r.editability, r.columns);
           } else if (event.event.kind === "rows") {
             r.rows = [...r.rows, ...event.event.rows];
           } else if (event.event.kind === "done") {
@@ -577,55 +583,7 @@ export const useWorkspaces = create<WorkspaceState>((set, get) => ({
   pendingChanges: (wsId, tabId) => {
     const tab = findTab(get().workspaces[wsId], tabId);
     if (!tab) return [];
-    const { editability, columns, rows, changes, inserts } = tab.result;
-    if (!editability?.editable) return [];
-
-    const colIndex = new Map(columns.map((c, i) => [c.name, i]));
-    const pkOf = (row: Row): Record<string, DbValue> => {
-      const pk: Record<string, DbValue> = {};
-      for (const pkCol of editability.pkColumns) {
-        // buscar la columna del resultado cuyo source es la col PK
-        const resultCol = Object.entries(editability.columnSources).find(
-          ([, src]) => src === pkCol,
-        )?.[0];
-        const idx = resultCol != null ? colIndex.get(resultCol) : undefined;
-        pk[pkCol] = idx != null ? row[idx] : { t: "null" };
-      }
-      return pk;
-    };
-
-    const out: PendingChange[] = [];
-    for (const [rowIndexStr, change] of Object.entries(changes)) {
-      const row = rows[Number(rowIndexStr)];
-      if (!row) continue;
-      if (change.kind === "delete") {
-        out.push({ kind: "delete", pk: pkOf(row), values: {}, oldValues: {} });
-      } else {
-        // mapear nombres de columnas del resultado a columnas reales
-        const values: Record<string, DbValue> = {};
-        const oldValues: Record<string, DbValue> = {};
-        for (const [col, value] of Object.entries(change.values)) {
-          const src = editability.columnSources[col];
-          if (src) {
-            values[src] = value;
-            oldValues[src] = change.oldValues[col];
-          }
-        }
-        if (Object.keys(values).length > 0) {
-          out.push({ kind: "update", pk: pkOf(row), values, oldValues });
-        }
-      }
-    }
-    for (const insert of inserts) {
-      const values: Record<string, DbValue> = {};
-      for (const [col, value] of Object.entries(insert)) {
-        const src = editability.columnSources[col] ?? col;
-        if (value.t !== "null") values[src] = value;
-      }
-      if (Object.keys(values).length > 0) {
-        out.push({ kind: "insert", pk: {}, values, oldValues: {} });
-      }
-    }
-    return out;
+    const { editability, rows, changes, inserts } = tab.result;
+    return buildPendingChanges(editability, rows, changes, inserts);
   },
 }));

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::analyze::Editability;
+use crate::analyze::{EditTarget, Editability};
 use crate::config::Engine;
 use crate::driver::MutationStatement;
 use crate::error::{DbError, Result};
@@ -24,6 +24,9 @@ pub enum ChangeKind {
 #[serde(rename_all = "camelCase")]
 pub struct PendingChange {
     pub kind: ChangeKind,
+    /// Tabla afectada: índice en `Editability::targets`.
+    #[serde(default)]
+    pub target: usize,
     /// Valores de la PK de la fila afectada (update/delete).
     #[serde(default)]
     pub pk: HashMap<String, DbValue>,
@@ -42,15 +45,51 @@ pub fn quote_ident(engine: Engine, name: &str) -> String {
     }
 }
 
-fn qualified_table(engine: Engine, editability: &Editability) -> Result<String> {
-    let table = editability
-        .table
-        .as_deref()
-        .ok_or_else(|| DbError::Other("no target table".into()))?;
-    Ok(match &editability.namespace {
-        Some(ns) => format!("{}.{}", quote_ident(engine, ns), quote_ident(engine, table)),
-        None => quote_ident(engine, table),
-    })
+fn qualified_table(engine: Engine, target: &EditTarget) -> String {
+    let table = quote_ident(engine, &target.table);
+    match &target.namespace {
+        Some(ns) => format!("{}.{table}", quote_ident(engine, ns)),
+        None => table,
+    }
+}
+
+/// Une los UPDATE que tocan la misma fila de la misma tabla (con JOIN, una
+/// fila de `entidades` puede aparecer en varias filas del resultado). Dos
+/// valores distintos para la misma celda real son un conflicto.
+fn merge_updates(changes: &[PendingChange]) -> Result<Vec<PendingChange>> {
+    let mut out: Vec<PendingChange> = Vec::new();
+    for change in changes {
+        let same_row = out.iter_mut().find(|c| {
+            change.kind == ChangeKind::Update
+                && c.kind == ChangeKind::Update
+                && c.target == change.target
+                && c.pk == change.pk
+        });
+        let Some(existing) = same_row else {
+            out.push(change.clone());
+            continue;
+        };
+        for (col, value) in &change.values {
+            match existing.values.get(col) {
+                Some(v) if v != value => {
+                    return Err(DbError::Other(format!(
+                        "conflicting edits for column {col} of the same row"
+                    )))
+                }
+                Some(_) => {}
+                None => {
+                    existing.values.insert(col.clone(), value.clone());
+                }
+            }
+        }
+        for (col, value) in &change.old_values {
+            existing
+                .old_values
+                .entry(col.clone())
+                .or_insert_with(|| value.clone());
+        }
+    }
+    Ok(out)
 }
 
 /// Placeholder para el parámetro n (1-based), con cast explícito en Postgres
@@ -140,10 +179,27 @@ pub fn build_mutations(
                 .unwrap_or_else(|| "result set is not editable".into()),
         ));
     }
-    let table = qualified_table(engine, editability)?;
     let mut statements = Vec::new();
 
-    for change in changes {
+    for change in &merge_updates(changes)? {
+        let target = editability
+            .targets
+            .get(change.target)
+            .ok_or_else(|| DbError::Other("unknown target table".into()))?;
+        if !target.editable {
+            return Err(DbError::Other(
+                target
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| format!("{} is not editable", target.table)),
+            ));
+        }
+        if change.kind != ChangeKind::Update && editability.row_target != Some(change.target) {
+            return Err(DbError::Other(
+                "rows can only be inserted or deleted when the query reads a single table".into(),
+            ));
+        }
+        let table = qualified_table(engine, target);
         let mut b = SqlBuilder::new(engine);
         match change.kind {
             ChangeKind::Update => {
@@ -160,11 +216,11 @@ pub fn build_mutations(
                     b.push(&format!("{} = ", quote_ident(engine, col)));
                     b.push_value(value);
                 }
-                push_where(&mut b, engine, change, editability, optimistic_guards)?;
+                push_where(&mut b, engine, change, target, optimistic_guards)?;
             }
             ChangeKind::Delete => {
                 b.push(&format!("DELETE FROM {table}"));
-                push_where(&mut b, engine, change, editability, optimistic_guards)?;
+                push_where(&mut b, engine, change, target, optimistic_guards)?;
             }
             ChangeKind::Insert => {
                 if change.values.is_empty() {
@@ -207,7 +263,7 @@ fn push_where(
     b: &mut SqlBuilder,
     engine: Engine,
     change: &PendingChange,
-    editability: &Editability,
+    target: &EditTarget,
     optimistic_guards: bool,
 ) -> Result<()> {
     if change.pk.is_empty() {
@@ -228,7 +284,7 @@ fn push_where(
         }
     };
 
-    for pk_col in &editability.pk_columns {
+    for pk_col in &target.pk_columns {
         let value = change
             .pk
             .get(pk_col)
@@ -239,7 +295,7 @@ fn push_where(
         let mut old: Vec<_> = change.old_values.iter().collect();
         old.sort_by(|a, b| a.0.cmp(b.0));
         for (col, value) in old {
-            if !editability.pk_columns.contains(col) {
+            if !target.pk_columns.contains(col) {
                 push_cond(b, col, value);
             }
         }
@@ -255,16 +311,24 @@ mod tests {
         Editability {
             editable: true,
             reason: None,
-            namespace: Some("public".into()),
-            table: Some("customers".into()),
-            pk_columns: vec!["id".into()],
-            column_sources: HashMap::new(),
+            targets: vec![EditTarget {
+                namespace: Some("public".into()),
+                table: "customers".into(),
+                alias: None,
+                pk_columns: vec!["id".into()],
+                pk_indexes: vec![0],
+                editable: true,
+                reason: None,
+            }],
+            columns: Vec::new(),
+            row_target: Some(0),
         }
     }
 
     #[test]
     fn update_postgres_with_guard() {
         let change = PendingChange {
+            target: 0,
             kind: ChangeKind::Update,
             pk: HashMap::from([("id".into(), DbValue::Int(7))]),
             values: HashMap::from([("name".into(), DbValue::Text("Ana".into()))]),
@@ -286,8 +350,9 @@ mod tests {
     #[test]
     fn delete_mysql_quoting() {
         let mut e = editability();
-        e.namespace = None;
+        e.targets[0].namespace = None;
         let change = PendingChange {
+            target: 0,
             kind: ChangeKind::Delete,
             pk: HashMap::from([("id".into(), DbValue::Int(1))]),
             values: HashMap::new(),
@@ -300,6 +365,7 @@ mod tests {
     #[test]
     fn insert_generates_no_expected_rows() {
         let change = PendingChange {
+            target: 0,
             kind: ChangeKind::Insert,
             pk: HashMap::new(),
             values: HashMap::from([
@@ -319,6 +385,7 @@ mod tests {
     #[test]
     fn null_pk_uses_is_null() {
         let change = PendingChange {
+            target: 0,
             kind: ChangeKind::Delete,
             pk: HashMap::from([("id".into(), DbValue::Null)]),
             values: HashMap::new(),
@@ -329,5 +396,75 @@ mod tests {
             st[0].sql,
             r#"DELETE FROM "public"."customers" WHERE "id" IS NULL"#
         );
+    }
+
+    fn join_editability() -> Editability {
+        let mut e = editability();
+        e.targets.push(EditTarget {
+            namespace: None,
+            table: "entidades".into(),
+            alias: Some("e".into()),
+            pk_columns: vec!["id".into()],
+            pk_indexes: vec![1],
+            editable: true,
+            reason: None,
+        });
+        e.row_target = None;
+        e
+    }
+
+    fn update(target: usize, id: i64, col: &str, new: &str, old: &str) -> PendingChange {
+        PendingChange {
+            target,
+            kind: ChangeKind::Update,
+            pk: HashMap::from([("id".into(), DbValue::Int(id))]),
+            values: HashMap::from([(col.into(), DbValue::Text(new.into()))]),
+            old_values: HashMap::from([(col.into(), DbValue::Text(old.into()))]),
+        }
+    }
+
+    #[test]
+    fn join_updates_each_table_and_merges_same_row() {
+        let changes = [
+            update(0, 1, "name", "A", "a"),
+            update(1, 9, "nombre", "X", "x"),
+            // Otra fila del resultado con la misma entidad.
+            update(1, 9, "ruc", "R", "r"),
+        ];
+        let st = build_mutations(Engine::Postgres, &join_editability(), &changes, false).unwrap();
+        assert_eq!(st.len(), 2);
+        assert_eq!(
+            st[1].sql,
+            r#"UPDATE "entidades" SET "nombre" = $1, "ruc" = $2 WHERE "id" = $3"#
+        );
+    }
+
+    #[test]
+    fn conflicting_edits_of_same_row_fail() {
+        let changes = [
+            update(1, 9, "nombre", "X", "x"),
+            update(1, 9, "nombre", "Y", "x"),
+        ];
+        assert!(build_mutations(Engine::Postgres, &join_editability(), &changes, false).is_err());
+    }
+
+    #[test]
+    fn delete_with_join_fails() {
+        let change = PendingChange {
+            target: 0,
+            kind: ChangeKind::Delete,
+            pk: HashMap::from([("id".into(), DbValue::Int(1))]),
+            values: HashMap::new(),
+            old_values: HashMap::new(),
+        };
+        assert!(build_mutations(Engine::Postgres, &join_editability(), &[change], false).is_err());
+    }
+
+    #[test]
+    fn non_editable_target_fails() {
+        let mut e = join_editability();
+        e.targets[1].editable = false;
+        let changes = [update(1, 9, "nombre", "X", "x")];
+        assert!(build_mutations(Engine::Postgres, &e, &changes, false).is_err());
     }
 }

@@ -112,6 +112,7 @@ async fn postgres_end_to_end() {
     assert!(editability.editable);
 
     let change = PendingChange {
+        target: 0,
         kind: ChangeKind::Update,
         pk: HashMap::from([("id".into(), DbValue::Int(1))]),
         values: HashMap::from([("name".into(), DbValue::Text("Renamed 1".into()))]),
@@ -131,6 +132,7 @@ async fn postgres_end_to_end() {
 
     // Restaurar
     let restore = PendingChange {
+        target: 0,
         kind: ChangeKind::Update,
         pk: HashMap::from([("id".into(), DbValue::Int(1))]),
         values: HashMap::from([("name".into(), DbValue::Text("Customer 1".into()))]),
@@ -141,6 +143,7 @@ async fn postgres_end_to_end() {
 
     // Insert + delete round-trip
     let insert = PendingChange {
+        target: 0,
         kind: ChangeKind::Insert,
         pk: HashMap::new(),
         values: HashMap::from([
@@ -164,6 +167,7 @@ async fn postgres_end_to_end() {
     };
 
     let delete = PendingChange {
+        target: 0,
         kind: ChangeKind::Delete,
         pk: HashMap::from([("id".into(), DbValue::Int(temp_id))]),
         values: HashMap::new(),
