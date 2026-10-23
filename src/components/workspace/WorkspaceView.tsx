@@ -75,6 +75,28 @@ export default function WorkspaceView({ workspace }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [favName, setFavName] = useState<string | null>(null);
   const [showBackup, setShowBackup] = useState(false);
+  const [autoRunDialog, setAutoRunDialog] = useState<{ paneId: string; sql: string; from: number; seconds: string } | null>(null);
+  const [autoRuns, setAutoRuns] = useState<Record<string, { sql: string; from: number; seconds: number }>>({});
+  const stopAutoRun = (paneId: string) => setAutoRuns((prev) => {
+    const next = { ...prev };
+    delete next[paneId];
+    return next;
+  });
+
+  useEffect(() => {
+    const timers = Object.entries(autoRuns).map(([paneId, job]) => window.setInterval(() => {
+      const store = useWorkspaces.getState();
+      const target = findTab(store.workspaces[wsId], paneId);
+      if (!target || target.result.error || target.result.warnings.length > 0) {
+        stopAutoRun(paneId);
+        return;
+      }
+      if (!target.result.running && pendingOf(target) === 0) {
+        void store.runQuery(wsId, paneId, false, job.sql, job.from);
+      }
+    }, job.seconds * 1000));
+    return () => timers.forEach(window.clearInterval);
+  }, [autoRuns, wsId]);
   /** Diálogo de exportación: formato y, para CSV, separador elegido (null = cerrado). */
   const [exportDialog, setExportDialog] = useState<{
     format: ExportFormat;
@@ -158,7 +180,7 @@ export default function WorkspaceView({ workspace }: Props) {
     ws.setActiveTab(wsId, tabs[(idx + delta + tabs.length) % tabs.length].id);
   };
   const modalOpen =
-    preview !== null || favName !== null || showBackup || showDbPicker || exportDialog !== null;
+    preview !== null || favName !== null || showBackup || showDbPicker || exportDialog !== null || autoRunDialog !== null;
 
   /** Split: cambia el panel activo y lleva el foco a su editor. */
   const focusPane = (split: boolean) => {
@@ -183,6 +205,7 @@ export default function WorkspaceView({ workspace }: Props) {
       setShowBackup(false);
       setShowDbPicker(false);
       setExportDialog(null);
+      setAutoRunDialog(null);
     } },
     { action: "newTab", run: () => ws.addTab(wsId) },
     // Sin tabs abiertos, Ctrl+W cierra la conexión (como Ctrl+Esc).
@@ -609,8 +632,39 @@ export default function WorkspaceView({ workspace }: Props) {
                 >
                   {t("ws.run")}
                 </button>
+                <button
+                  className={autoRuns[pane.id] ? "primary" : undefined}
+                  aria-pressed={!!autoRuns[pane.id]}
+                  aria-label={autoRuns[pane.id]
+                    ? t("ws.autoRunStop", { seconds: autoRuns[pane.id].seconds })
+                    : t("ws.autoRun")}
+                  title={autoRuns[pane.id]
+                    ? t("ws.autoRunStop", { seconds: autoRuns[pane.id].seconds })
+                    : t("ws.autoRun")}
+                  disabled={!autoRuns[pane.id] && (pane.result.running || pendingCount > 0 || !pane.sql.trim())}
+                  onClick={() => {
+                    if (autoRuns[pane.id]) {
+                      stopAutoRun(pane.id);
+                    } else {
+                      const api = apiFor(pane).current;
+                      const selection = api?.getSelection();
+                      setAutoRunDialog({ paneId: pane.id, sql: selection || pane.sql,
+                        from: selection ? api?.selectionFrom() ?? 0 : 0, seconds: "5" });
+                    }
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    aria-hidden="true" style={{ display: "block" }}>
+                    <path d="M20 7v5h-5M4 17v-5h5" />
+                    <path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17" />
+                  </svg>
+                </button>
                 {pane.result.running && (
-                  <button onClick={() => void ws.cancelQuery(wsId, pane.id)}>{t("ws.cancel")}</button>
+                  <button onClick={() => {
+                    stopAutoRun(pane.id);
+                    void ws.cancelQuery(wsId, pane.id);
+                  }}>{t("ws.cancel")}</button>
                 )}
                 {engine !== "redis" && (
                   <button
@@ -672,6 +726,36 @@ export default function WorkspaceView({ workspace }: Props) {
           )}
         </Panel>
       </PanelGroup>
+
+      {autoRunDialog && (
+        <div className="modal-backdrop" onClick={() => setAutoRunDialog(null)}>
+          <form className="modal" role="dialog" aria-modal="true" aria-labelledby="auto-run-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const seconds = Number(autoRunDialog.seconds);
+              const target = findTab(useWorkspaces.getState().workspaces[wsId], autoRunDialog.paneId);
+              if (!Number.isInteger(seconds) || seconds < 1 || seconds > 86400 || !target ||
+                  target.result.running || pendingOf(target) > 0 || !autoRunDialog.sql.trim()) return;
+              const { paneId, sql, from } = autoRunDialog;
+              setAutoRuns((prev) => ({ ...prev, [paneId]: { sql, from, seconds } }));
+              setAutoRunDialog(null);
+              void useWorkspaces.getState().runQuery(wsId, paneId, false, sql, from);
+            }}
+          >
+            <h3 id="auto-run-title">{t("ws.autoRun")}</h3>
+            <label htmlFor="auto-run-seconds">{t("ws.autoRunInterval")}</label>
+            <input id="auto-run-seconds" type="number" min="1" max="86400" step="1" required autoFocus
+              value={autoRunDialog.seconds}
+              onChange={(e) => setAutoRunDialog({ ...autoRunDialog, seconds: e.target.value })} />
+            <p className="dim">{t("ws.autoRunHint")}</p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setAutoRunDialog(null)}>{t("common.cancel")}</button>
+              <button type="submit" className="primary">{t("ws.autoRunStart")}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {preview && (
         <CodePreviewModal
