@@ -79,6 +79,13 @@ export default function Sidebar() {
         🕘
       </button>
       <button
+        className={`rail-btn ${active === "backup" ? "active" : ""}`}
+        title={t("sidebar.backup")}
+        onClick={() => setActive("backup")}
+      >
+        💾
+      </button>
+      <button
         className={`rail-btn ${active === "settings" ? "active" : ""}`}
         title={t("sidebar.settings")}
         onClick={() => setActive("settings")}

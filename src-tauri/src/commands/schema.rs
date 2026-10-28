@@ -10,6 +10,19 @@ pub async fn list_databases(state: State<'_, AppState>, conn_id: String) -> CmdR
     Ok(handle.list_databases().await?)
 }
 
+/// Crea una database en el servidor de la conexión y devuelve la lista
+/// actualizada.
+#[tauri::command]
+pub async fn create_database(
+    state: State<'_, AppState>,
+    conn_id: String,
+    name: String,
+) -> CmdResult<Vec<String>> {
+    let handle = state.pools.get(&conn_id).await?;
+    handle.create_database(&name).await?;
+    Ok(handle.list_databases().await?)
+}
+
 #[tauri::command]
 pub async fn get_schema(
     state: State<'_, AppState>,

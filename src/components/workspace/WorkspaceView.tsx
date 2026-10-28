@@ -25,6 +25,9 @@ import {
   type ExportOptions,
 } from "../../lib/export";
 
+/** Valor centinela de la opción "nueva database" del selector del header. */
+const NEW_DB_OPTION = "\u0000new-database";
+
 /** Separadores de CSV ofrecidos en el diálogo de exportación. */
 const CSV_SEPARATORS: { value: string; label: MessageKey }[] = [
   { value: ";", label: "export.sepSemicolon" },
@@ -36,7 +39,6 @@ import SqlEditor, { type EditorApi } from "../editor/SqlEditor";
 import ResultsGrid from "../grid/ResultsGrid";
 import SchemaTree from "../schema/SchemaTree";
 import CodePreviewModal from "../preview/CodePreviewModal";
-import BackupModal from "../backup/BackupModal";
 import DatabasePicker from "./DatabasePicker";
 
 interface Props {
@@ -74,7 +76,23 @@ export default function WorkspaceView({ workspace }: Props) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [favName, setFavName] = useState<string | null>(null);
-  const [showBackup, setShowBackup] = useState(false);
+  /** Diálogo "nueva database" del selector del header (null = cerrado). */
+  const [newDb, setNewDb] = useState<{ name: string; error: string | null; busy: boolean } | null>(null);
+  const canCreateDb =
+    !!info?.capabilities.multipleDatabases &&
+    (engine === "postgres" || engine === "mysql" || engine === "mariadb");
+  const createDb = async () => {
+    const name = newDb?.name.trim();
+    if (!newDb || !name || newDb.busy) return;
+    setNewDb({ ...newDb, busy: true, error: null });
+    try {
+      await useConnections.getState().createDatabase(connId, name);
+      setNewDb(null);
+      openDatabase(name);
+    } catch (e) {
+      setNewDb({ ...newDb, busy: false, error: errorMessage(e) });
+    }
+  };
   const [autoRunDialog, setAutoRunDialog] = useState<{ paneId: string; sql: string; from: number; seconds: string } | null>(null);
   const [autoRuns, setAutoRuns] = useState<Record<string, { sql: string; from: number; seconds: number }>>({});
   const stopAutoRun = (paneId: string) => setAutoRuns((prev) => {
@@ -105,7 +123,6 @@ export default function WorkspaceView({ workspace }: Props) {
   } | null>(null);
   /** Exportación en curso: id (para cancelar) y filas escritas hasta ahora. */
   const [exporting, setExporting] = useState<{ id: string; rows: number } | null>(null);
-  const [backupSupported, setBackupSupported] = useState(false);
   const editorApi = useRef<EditorApi | null>(null);
   const splitApi = useRef<EditorApi | null>(null);
   /** Panel cuyo preview de cambios está abierto (destino del commit). */
@@ -163,13 +180,6 @@ export default function WorkspaceView({ workspace }: Props) {
       ? run(p, confirmDangerous, p.result.executedSql, p.result.executedFrom ?? undefined)
       : run(p, confirmDangerous, p.sql, 0);
 
-  useEffect(() => {
-    void ipc
-      .getPlatformCapabilities()
-      .then((caps) => setBackupSupported(caps.backupSupported))
-      .catch(() => {});
-  }, []);
-
   const pendingCount = pendingOf(pane);
 
   /** Tab anterior/siguiente (circular). */
@@ -180,7 +190,7 @@ export default function WorkspaceView({ workspace }: Props) {
     ws.setActiveTab(wsId, tabs[(idx + delta + tabs.length) % tabs.length].id);
   };
   const modalOpen =
-    preview !== null || favName !== null || showBackup || showDbPicker || exportDialog !== null || autoRunDialog !== null;
+    preview !== null || favName !== null || newDb !== null || showDbPicker || exportDialog !== null || autoRunDialog !== null;
 
   /** Split: cambia el panel activo y lleva el foco a su editor. */
   const focusPane = (split: boolean) => {
@@ -202,7 +212,7 @@ export default function WorkspaceView({ workspace }: Props) {
       setPreview(null);
       setPreviewError(null);
       setFavName(null);
-      setShowBackup(false);
+      setNewDb(null);
       setShowDbPicker(false);
       setExportDialog(null);
       setAutoRunDialog(null);
@@ -570,21 +580,19 @@ export default function WorkspaceView({ workspace }: Props) {
           <select
             title={t("ws.openDatabase", { keys: keyOpenDb })}
             value={database}
-            onChange={(e) => openDatabase(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === NEW_DB_OPTION) setNewDb({ name: "", error: null, busy: false });
+              else openDatabase(e.target.value);
+            }}
           >
             {(info?.databases ?? [database]).map((db) => (
               <option key={db} value={db}>
                 {db}
               </option>
             ))}
+            {canCreateDb && <option value={NEW_DB_OPTION}>{t("ws.newDatabase")}</option>}
           </select>
         )}
-        {(backupSupported || engine === "sqlite") &&
-          info?.capabilities.backup && (
-            <button onClick={() => setShowBackup(true)} title={t("ws.backupTitle")}>
-              {t("ws.backup")}
-            </button>
-          )}
         <div className="tab-bar">
           {workspace.tabs.map((t) => (
             <div
@@ -776,21 +784,43 @@ export default function WorkspaceView({ workspace }: Props) {
         />
       )}
 
-      {showBackup && (
-        <BackupModal
-          connId={connId}
-          connName={config.name}
-          engine={engine}
-          database={database}
-          onClose={() => setShowBackup(false)}
-        />
+
+      {newDb && (
+        <div className="modal-backdrop" onClick={() => !newDb.busy && setNewDb(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{t("ws.newDatabaseTitle", { name: config.name })}</h3>
+            <input
+              autoFocus
+              placeholder={t("ws.newDatabaseName")}
+              value={newDb.name}
+              onChange={(e) => setNewDb({ ...newDb, name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void createDb();
+                if (e.key === "Escape") setNewDb(null);
+              }}
+            />
+            {newDb.error && <p className="test-fail">{newDb.error}</p>}
+            <div className="modal-actions">
+              <button onClick={() => setNewDb(null)} disabled={newDb.busy}>
+                {t("common.cancel")}
+              </button>
+              <button
+                className="primary"
+                disabled={!newDb.name.trim() || newDb.busy}
+                onClick={() => void createDb()}
+              >
+                {newDb.busy ? t("common.running") : t("ws.createDatabase")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showDbPicker && (
         <DatabasePicker
           connId={connId}
           current={database}
-          databases={info?.databases ?? [database]}
+          canCreate={canCreateDb}
           // Abre la database en una entrada nueva del rail; la actual no cambia.
           onSelect={openDatabase}
           onClose={() => setShowDbPicker(false)}

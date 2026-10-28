@@ -43,6 +43,11 @@ interface ConnectionsState {
   remove: (connId: string) => Promise<void>;
   connect: (connId: string) => Promise<ConnInfo>;
   disconnect: (connId: string) => Promise<void>;
+  /** Lista de databases compartida por el selector del header y el Ctrl+K. */
+  setDatabases: (connId: string, databases: string[]) => void;
+  refreshDatabases: (connId: string) => Promise<string[]>;
+  /** Crea la database en el servidor y actualiza la lista. */
+  createDatabase: (connId: string, name: string) => Promise<void>;
   createGroup: (name: string) => void;
   renameGroup: (from: string, to: string) => Promise<void>;
   /** Borra el grupo; sus conexiones se conservan y quedan sin grupo. */
@@ -111,6 +116,24 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
   disconnect: async (connId) => {
     await ipc.disconnect(connId);
     set((s) => ({ statuses: { ...s.statuses, [connId]: "disconnected" } }));
+  },
+
+  setDatabases: (connId, databases) => {
+    set((s) => {
+      const info = s.infos[connId];
+      if (!info) return {};
+      return { infos: { ...s.infos, [connId]: { ...info, databases } } };
+    });
+  },
+
+  refreshDatabases: async (connId) => {
+    const databases = await ipc.listDatabases(connId);
+    if (databases.length > 0) get().setDatabases(connId, databases);
+    return databases;
+  },
+
+  createDatabase: async (connId, name) => {
+    get().setDatabases(connId, await ipc.createDatabase(connId, name.trim()));
   },
 
   createGroup: (name) => {

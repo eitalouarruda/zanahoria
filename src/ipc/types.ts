@@ -196,6 +196,14 @@ export interface SniffResult {
   compressed: boolean;
   restoreTool: string | null;
   note: string;
+  /** Versión del formato de archive de pg_dump ("1.16"). */
+  archiveVersion: string | null;
+  sourceEngine: "postgres" | "mysql" | "mariadb" | null;
+  sourceVersion: string | null;
+  dumpedBy: string | null;
+  sourceDb: string | null;
+  /** Tamaño en bytes (null para dumps en directorio). */
+  size: number | null;
 }
 
 export interface BackupOptions {
@@ -204,6 +212,8 @@ export interface BackupOptions {
   schemaOnly: boolean;
   dataOnly: boolean;
   tables: string[];
+  /** Database a respaldar; ausente = la de la conexión. */
+  database?: string;
 }
 
 export interface RestoreOptions {
@@ -211,6 +221,38 @@ export interface RestoreOptions {
   targetDb: string;
   clean: boolean;
   singleTransaction: boolean;
+  /** Crear la database destino si no existe. */
+  createDb: boolean;
+  /** Seguir tras errores (el job igual se reporta como fallido). */
+  continueOnError: boolean;
+  /** Restaurar GRANT/REVOKE (por defecto no: los roles de origen no suelen existir). */
+  keepPrivileges: boolean;
+}
+
+export interface PlanNote {
+  code: string;
+  params: Record<string, string>;
+}
+
+/** Análisis previo al restore: versiones, estrategia y correcciones. */
+export interface RestorePlan {
+  sniff: SniffResult;
+  strategy: "direct" | "compat" | "script";
+  tool: string | null;
+  toolVersion: string | null;
+  targetVersion: string | null;
+  targetExists: boolean;
+  targetTables: number | null;
+  fixes: string[];
+  warnings: PlanNote[];
+  blocker: PlanNote | null;
+}
+
+/** Avance de un job: unidades hechas / total (0 = desconocido). */
+export interface BackupProgress {
+  jobId: string;
+  done: number;
+  total: number;
 }
 
 export type BackupEvent =

@@ -7,6 +7,7 @@ import WorkspaceView from "./components/workspace/WorkspaceView";
 import FavoritesView from "./components/favorites/FavoritesView";
 import HistoryView from "./components/history/HistoryView";
 import SettingsView from "./components/settings/SettingsView";
+import BackupView from "./components/backup/BackupView";
 import UpdateDialog from "./components/update/UpdateDialog";
 import { useConnections } from "./stores/connectionsStore";
 import { useSettings } from "./stores/settingsStore";
@@ -69,6 +70,10 @@ export default function App() {
         {active === "home" && <ConnectionManager />}
         {active === "favorites" && <FavoritesView />}
         {active === "history" && <HistoryView />}
+        {/* Montado siempre: un backup/restore en curso sigue al cambiar de vista. */}
+        <div className="view-slot" hidden={active !== "backup"}>
+          <BackupView />
+        </div>
         {active === "settings" && <SettingsView />}
         {workspace && <WorkspaceView key={workspace.id} workspace={workspace} />}
       </main>

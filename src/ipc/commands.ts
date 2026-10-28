@@ -3,6 +3,7 @@ import type { ExportFormat, ExportOptions } from "../lib/export";
 import type {
   BackupOptions,
   RestoreOptions,
+  RestorePlan,
   SniffResult,
   ToolStatus,
   ConnectionConfig,
@@ -41,6 +42,9 @@ export const ipc = {
   cancelQuery: (queryId: string) => invoke<void>("cancel_query", { queryId }),
 
   listDatabases: (connId: string) => invoke<string[]>("list_databases", { connId }),
+  /** Crea la database y devuelve la lista actualizada. */
+  createDatabase: (connId: string, name: string) =>
+    invoke<string[]>("create_database", { connId, name }),
   getSchema: (connId: string, database: string) =>
     invoke<DbSchema>("get_schema", { connId, database }),
   refreshSchema: (connId: string, database: string) =>
@@ -71,6 +75,8 @@ export const ipc = {
   sniffDumpFile: (path: string) => invoke<SniffResult>("sniff_dump_file", { path }),
   startBackup: (connId: string, options: BackupOptions) =>
     invoke<[string, string]>("start_backup", { connId, options }),
+  planRestore: (connId: string, options: RestoreOptions) =>
+    invoke<RestorePlan>("plan_restore", { connId, options }),
   startRestore: (connId: string, options: RestoreOptions) =>
     invoke<[string, string]>("start_restore", { connId, options }),
   cancelJob: (jobId: string) => invoke<void>("cancel_job", { jobId }),

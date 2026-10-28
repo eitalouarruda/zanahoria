@@ -72,6 +72,29 @@ impl MySqlEngine {
         Ok(rows.iter().map(|r| r.get::<String, _>(0)).collect())
     }
 
+    pub async fn server_version(&self) -> Result<String> {
+        let row = sqlx::query("SELECT CAST(VERSION() AS CHAR)")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.get::<String, _>(0))
+    }
+
+    pub async fn create_database(&self, name: &str) -> Result<()> {
+        let sql = format!("CREATE DATABASE `{}`", name.replace('`', "``"));
+        sqlx::raw_sql(&sql).execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn user_table_count(&self) -> Result<i64> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) FROM information_schema.TABLES \
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.get::<i64, _>(0))
+    }
+
     pub async fn introspect(&self, database: &str) -> Result<DbSchema> {
         let cols = sqlx::query(
             r#"

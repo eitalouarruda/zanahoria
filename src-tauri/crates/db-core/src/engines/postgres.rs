@@ -73,6 +73,40 @@ impl PgEngine {
         Ok(rows.iter().map(|r| r.get::<String, _>(0)).collect())
     }
 
+    pub async fn server_version(&self) -> Result<String> {
+        let row = sqlx::query("SHOW server_version")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.get::<String, _>(0))
+    }
+
+    /// CREATE DATABASE no admite parámetros: el nombre va como identificador
+    /// citado. template0 evita heredar objetos de template1 (el destino de un
+    /// restore debe quedar vacío).
+    pub async fn create_database(&self, name: &str) -> Result<()> {
+        let sql = format!(
+            "CREATE DATABASE \"{}\" TEMPLATE template0",
+            name.replace('"', "\"\"")
+        );
+        sqlx::raw_sql(&sql).execute(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn user_table_count(&self) -> Result<i64> {
+        let row = sqlx::query(
+            r#"
+            SELECT count(*) FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind IN ('r', 'p')
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+              AND n.nspname NOT LIKE 'pg_toast%'
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.get::<i64, _>(0))
+    }
+
     pub async fn introspect(&self) -> Result<DbSchema> {
         let cols = sqlx::query(
             r#"

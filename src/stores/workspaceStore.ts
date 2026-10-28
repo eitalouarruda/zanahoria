@@ -111,7 +111,7 @@ export function workspaceId(connId: string, database: string): string {
   return `${connId}::${database}`;
 }
 
-export type ActiveView = "home" | "favorites" | "history" | "settings" | string;
+export type ActiveView = "home" | "favorites" | "history" | "backup" | "settings" | string;
 
 function emptyResult(): ResultState {
   return {

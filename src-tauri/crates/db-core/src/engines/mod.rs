@@ -100,6 +100,39 @@ impl EngineHandle {
         }
     }
 
+    /// Versión del servidor ("18.6 (Debian…)", "8.0.36", "10.11.6-MariaDB").
+    pub async fn server_version(&self) -> Result<String> {
+        match self {
+            EngineHandle::Postgres(e) => e.server_version().await,
+            EngineHandle::MySql(e) => e.server_version().await,
+            _ => Err(DbError::Unsupported("server version".into())),
+        }
+    }
+
+    /// Crea una database nueva en el servidor.
+    pub async fn create_database(&self, name: &str) -> Result<()> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(DbError::Other("database name is empty".into()));
+        }
+        match self {
+            EngineHandle::Postgres(e) => e.create_database(name).await,
+            EngineHandle::MySql(e) => e.create_database(name).await,
+            _ => Err(DbError::Unsupported(
+                "this engine cannot create databases".into(),
+            )),
+        }
+    }
+
+    /// Tablas de usuario en la database del handle.
+    pub async fn user_table_count(&self) -> Result<i64> {
+        match self {
+            EngineHandle::Postgres(e) => e.user_table_count().await,
+            EngineHandle::MySql(e) => e.user_table_count().await,
+            _ => Err(DbError::Unsupported("table count".into())),
+        }
+    }
+
     pub async fn introspect(&self, database: &str) -> Result<DbSchema> {
         match self {
             EngineHandle::Postgres(e) => e.introspect().await,
