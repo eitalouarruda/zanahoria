@@ -353,4 +353,7 @@ export const pt: Record<MessageKey, string> = {
   "bk.err.badFile": "O arquivo gerado está incompleto ou não pode ser lido. Não confie nele.",
   "bk.err.someErrors": "Terminou com {n} erros, então não é confiável.",
   "bk.err.generic": "Algo deu errado. A última mensagem de erro está abaixo.",
+  "bk.safe.title": "“{name}” está em modo seguro",
+  "bk.safe.body": "O modo seguro protege esta conexão contra alterações, e uma restauração grava muitos dados. Confirme que este é mesmo o servidor certo.",
+  "bk.safe.confirm": "Entendo, restaurar em “{db}” mesmo assim",
 };

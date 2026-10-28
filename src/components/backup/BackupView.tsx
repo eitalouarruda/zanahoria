@@ -385,6 +385,7 @@ function RestoreStep({
   const [singleTx, setSingleTx] = useState(true);
   const [continueOnError, setContinueOnError] = useState(false);
   const [keepPrivileges, setKeepPrivileges] = useState(false);
+  const [safeConfirmed, setSafeConfirmed] = useState(false);
   const [plan, setPlan] = useState<RestorePlan | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planNonce, setPlanNonce] = useState(0);
@@ -420,6 +421,7 @@ function RestoreStep({
     createDb: mode === "new",
     continueOnError,
     keepPrivileges,
+    confirmSafeMode: conn.safeMode && safeConfirmed,
   };
 
   useEffect(() => {
@@ -445,7 +447,10 @@ function RestoreStep({
 
   const replacing = mode === "existing" && (plan?.targetTables ?? 0) > 0;
   const confirmed = !replacing || confirmText.trim() === targetDb;
-  const ready = !!plan && !plan.blocker && !nameTaken && confirmed && !starting;
+  // La confirmación nombra el destino: al cambiarlo hay que confirmar de nuevo.
+  useEffect(() => setSafeConfirmed(false), [targetDb]);
+  const safeOk = !conn.safeMode || safeConfirmed;
+  const ready = !!plan && !plan.blocker && !nameTaken && confirmed && safeOk && !starting;
 
   const start = async () => {
     if (!ready || !plan) return;
@@ -613,6 +618,21 @@ function RestoreStep({
           </label>
         )}
       </details>
+
+      {conn.safeMode && plan && !plan.blocker && (
+        <div className="bk-safe">
+          <strong>🛡 {t("bk.safe.title", { name: conn.name })}</strong>
+          <span>{t("bk.safe.body")}</span>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={safeConfirmed}
+              onChange={(e) => setSafeConfirmed(e.target.checked)}
+            />
+            {t("bk.safe.confirm", { db: targetDb })}
+          </label>
+        </div>
+      )}
 
       {startError && <p className="test-fail">{startError}</p>}
       <div className="bk-footer">

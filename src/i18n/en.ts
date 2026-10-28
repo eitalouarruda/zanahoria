@@ -365,6 +365,9 @@ export const en = {
   "bk.err.badFile": "The resulting file is incomplete or cannot be read. Do not rely on it.",
   "bk.err.someErrors": "It finished with {n} errors, so it is not reliable.",
   "bk.err.generic": "Something went wrong. The last error message is below.",
+  "bk.safe.title": "“{name}” is in safe mode",
+  "bk.safe.body": "Safe mode protects this connection against changes, and a restore writes a lot of data. Make sure this is really the right server.",
+  "bk.safe.confirm": "I understand, restore into “{db}” anyway",
 };
 
 export type MessageKey = keyof typeof en;

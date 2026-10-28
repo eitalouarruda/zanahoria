@@ -359,6 +359,13 @@ mod desktop {
         options: backup::RestoreOptions,
     ) -> CmdResult<(String, String)> {
         let cfg = state.store.connection_for_connect(&conn_id)?;
+        // Safe mode protege la conexión de cambios: un restore los hace todos,
+        // así que exige la confirmación explícita del usuario.
+        if cfg.safe_mode && !options.confirm_safe_mode {
+            return Err(CmdError {
+                message: "this connection is in safe mode: confirm the restore explicitly".into(),
+            });
+        }
         let statuses = detect(&state).await;
         let plan = make_plan(&state, &conn_id, &options, &statuses).await?;
         let tools = paths(&statuses);

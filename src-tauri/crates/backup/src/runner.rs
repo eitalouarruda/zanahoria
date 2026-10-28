@@ -117,6 +117,8 @@ pub struct RestoreOptions {
     /// Restaurar GRANT/REVOKE. Por defecto no: los roles del servidor de
     /// origen casi nunca existen en el destino y harían fallar el restore.
     pub keep_privileges: bool,
+    /// El usuario confirmó restaurar sobre una conexión en safe mode.
+    pub confirm_safe_mode: bool,
 }
 
 impl Default for RestoreOptions {
@@ -129,6 +131,7 @@ impl Default for RestoreOptions {
             create_db: true,
             continue_on_error: false,
             keep_privileges: false,
+            confirm_safe_mode: false,
         }
     }
 }

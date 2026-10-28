@@ -1862,3 +1862,25 @@ body.col-dragging * {
   background: var(--bg);
   color: var(--red);
 }
+.bk-safe {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--yellow);
+  border-radius: 8px;
+  color: var(--yellow);
+}
+.bk-safe > span {
+  color: var(--fg);
+  font-size: 13px;
+}
+.bk-safe .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-strong);
+  font-weight: 600;
+  cursor: pointer;
+}

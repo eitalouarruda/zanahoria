@@ -227,6 +227,8 @@ export interface RestoreOptions {
   continueOnError: boolean;
   /** Restaurar GRANT/REVOKE (por defecto no: los roles de origen no suelen existir). */
   keepPrivileges: boolean;
+  /** Confirmación explícita para restaurar sobre una conexión en safe mode. */
+  confirmSafeMode: boolean;
 }
 
 export interface PlanNote {
