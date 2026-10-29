@@ -149,6 +149,10 @@ jobs:
           work="$(mktemp -d)"
           (cd "$work" && "$GITHUB_WORKSPACE/$img" --appimage-extract >/dev/null)
           rm -v "$work"/squashfs-root/usr/lib/libwayland-*.so*
+          # La extracción deja directorios en 0700 y appimagetool (continuous)
+          # rechaza el AppDir si no es legible/ejecutable por todos.
+          chmod -R a+rX "$work/squashfs-root"
+          chmod a+rx "$work/squashfs-root/AppRun"
           wget -q -O "$work/appimagetool" \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x "$work/appimagetool"
