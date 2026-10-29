@@ -280,10 +280,33 @@ export function dbValueToDisplay(v: DbValue): string {
   }
 }
 
-/** Convierte texto editado por el usuario de vuelta a DbValue, preservando el tipo original. */
-export function displayToDbValue(text: string, original: DbValue): DbValue {
+/**
+ * Tipo de DbValue que corresponde al tipo de la columna (nombres de sqlx en
+ * Postgres/MySQL/SQLite). `null` si no se reconoce: se trata como texto.
+ */
+export function dbTypeKind(dbType: string): DbValue["t"] | null {
+  const ty = dbType.toUpperCase().replace(/\s+UNSIGNED$/, "").trim();
+  if (ty.endsWith("[]")) return null;
+  if (["BOOL", "BOOLEAN"].includes(ty)) return "bool";
+  if (/^(INT[248]?|INTEGER|SMALLINT|TINYINT|MEDIUMINT|BIGINT|OID|YEAR)$/.test(ty)) return "int";
+  if (/^(FLOAT[48]?|REAL|DOUBLE( PRECISION)?)$/.test(ty)) return "float";
+  if (["NUMERIC", "DECIMAL", "MONEY"].includes(ty)) return "decimal";
+  if (["JSON", "JSONB"].includes(ty)) return "json";
+  if (ty === "DATE") return "date";
+  if (["TIME", "TIMETZ"].includes(ty)) return "time";
+  if (["TIMESTAMP", "TIMESTAMPTZ", "DATETIME"].includes(ty)) return "timestamp";
+  if (ty === "UUID") return "uuid";
+  return null;
+}
+
+/**
+ * Convierte texto editado por el usuario de vuelta a DbValue, preservando el
+ * tipo original. Si la celda era NULL, el tipo sale de `dbType` (columna).
+ */
+export function displayToDbValue(text: string, original: DbValue, dbType?: string): DbValue {
   if (text === "NULL" || text === "") return { t: "null" };
-  switch (original.t) {
+  const kind = original.t === "null" && dbType ? dbTypeKind(dbType) : original.t;
+  switch (kind) {
     case "bool":
       return { t: "bool", v: text.toLowerCase() === "true" || text === "1" };
     case "int": {

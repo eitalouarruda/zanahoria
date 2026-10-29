@@ -93,6 +93,10 @@ export const en = {
   "ws.formatTitle": "Format SQL ({keys})",
   "ws.favorite": "★ Favorite",
   "ws.favoriteTitle": "Save as favorite",
+  "ws.favoritesTitle": "Favorites for this database",
+  "ws.favoriteSaveCurrent": "+ Save current query as favorite",
+  "ws.history": "🕘 History",
+  "ws.historyTitle": "Query history for this database",
   "ws.split": "⫽ Split",
   "ws.splitTitle": "Split: independent editor and results side by side ({keys})",
   "ws.activePane": "active pane: {side}",
@@ -170,6 +174,7 @@ export const en = {
   "fav.title": "★ Favorite queries",
   "fav.search": "Search…",
   "fav.empty": "No favorites yet.",
+  "fav.emptyHere": "No favorites for this database yet.",
 
   // Backup
   "ws.newDatabase": "+ New database…",

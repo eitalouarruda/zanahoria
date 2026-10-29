@@ -88,6 +88,10 @@ export const pt: Record<MessageKey, string> = {
   "ws.formatTitle": "Formatar SQL ({keys})",
   "ws.favorite": "★ Favorita",
   "ws.favoriteTitle": "Salvar como favorita",
+  "ws.favoritesTitle": "Favoritas desta database",
+  "ws.favoriteSaveCurrent": "+ Salvar query atual como favorita",
+  "ws.history": "🕘 Histórico",
+  "ws.historyTitle": "Histórico de queries desta database",
   "ws.split": "⫽ Split",
   "ws.splitTitle": "Dividir: editor e resultados independentes lado a lado ({keys})",
   "ws.activePane": "painel ativo: {side}",
@@ -161,6 +165,7 @@ export const pt: Record<MessageKey, string> = {
   "fav.title": "★ Queries favoritas",
   "fav.search": "Buscar…",
   "fav.empty": "Sem favoritas.",
+  "fav.emptyHere": "Sem favoritas para esta database.",
 
   "ws.newDatabase": "+ Novo banco…",
   "ws.newDatabaseTitle": "Novo banco — {name}",

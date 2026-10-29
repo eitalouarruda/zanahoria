@@ -40,6 +40,7 @@ import ResultsGrid from "../grid/ResultsGrid";
 import SchemaTree from "../schema/SchemaTree";
 import CodePreviewModal from "../preview/CodePreviewModal";
 import DatabasePicker from "./DatabasePicker";
+import { FavoritesMenu, HistoryMenu } from "./QueryMenus";
 
 interface Props {
   workspace: Workspace;
@@ -682,9 +683,18 @@ export default function WorkspaceView({ workspace }: Props) {
                     {t("ws.format")}
                   </button>
                 )}
-                <button onClick={() => setFavName("")} title={t("ws.favoriteTitle")}>
-                  {t("ws.favorite")}
-                </button>
+                <FavoritesMenu
+                  connId={connId}
+                  database={database}
+                  onOpen={(sql, title) => ws.addTab(wsId, title, sql)}
+                  canSave={!!pane.sql.trim()}
+                  onSaveCurrent={() => setFavName("")}
+                />
+                <HistoryMenu
+                  connId={connId}
+                  database={database}
+                  onOpen={(sql) => ws.addTab(wsId, undefined, sql)}
+                />
                 <button
                   className={tab.split ? "active" : undefined}
                   onClick={toggleSplit}

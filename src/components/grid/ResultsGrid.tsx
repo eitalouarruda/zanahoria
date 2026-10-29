@@ -271,16 +271,16 @@ export default function ResultsGrid({
     if (!editing) return;
     if (editing.insert) {
       const insertIndex = editing.row - rows.length;
-      const original = inserts[insertIndex]?.[editing.col] ?? { t: "text", v: "" };
+      const original = inserts[insertIndex]?.[editing.col] ?? { t: "null" };
       editInsertCell(wsId,
         tab.id,
         insertIndex,
         editing.col,
-        displayToDbValue(editing.text, original),
+        displayToDbValue(editing.text, original, columns[editing.col]?.dbType),
       );
     } else {
       const original = rows[editing.row][editing.col];
-      const newValue = displayToDbValue(editing.text, original);
+      const newValue = displayToDbValue(editing.text, original, columns[editing.col]?.dbType);
       if (JSON.stringify(newValue) !== JSON.stringify(cellValue(editing.row, editing.col))) {
         editCell(wsId, tab.id, editing.row, editing.col, newValue, original);
         // Otras filas que ya editaron la misma celda real: mismo valor, así
