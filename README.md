@@ -5,8 +5,12 @@
 <h1 align="center">Zanahoria</h1>
 
 <p align="center">
+  <b>English</b> · <a href="README.pt-BR.md">Português</a> · <a href="README.es.md">Español</a>
+</p>
+
+<p align="center">
   A fast, keyboard-friendly desktop client for SQL databases and Redis.<br />
-  Built with Rust and Tauri for Linux and Windows.
+  Built with Rust and Tauri for Linux, Windows and macOS.
 </p>
 
 <p align="center">
@@ -150,19 +154,54 @@ In the results grid: arrow keys, <kbd>Tab</kbd>, <kbd>Home</kbd>/<kbd>End</kbd>
 and <kbd>PgUp</kbd>/<kbd>PgDn</kbd> move between cells, <kbd>Enter</kbd> or
 <kbd>F2</kbd> edits, and <kbd>Ctrl</kbd>+<kbd>C</kbd> copies the cell.
 
-## Download
+## Installation
 
-Get the latest installers from the [Releases page](../../releases):
+Download the latest version from the [Releases page](../../releases). A new
+release is published automatically on every push to `main`.
 
-- **Linux:** `Zanahoria_<version>_amd64.AppImage` — make it executable
-  (`chmod +x`) and run it.
-- **Windows:** `Zanahoria_<version>_x64-setup.exe` (or the `.msi`).
+### Linux
 
-A new release is published automatically on every push to `main`.
+1. Download `Zanahoria_<version>_amd64.AppImage`.
+2. Make it executable and run it:
 
-**Updates.** When Zanahoria starts it checks the latest GitHub release and, if
-there's a newer one, asks before installing it. The AppImage replaces itself
-and restarts; on Windows the installer runs in passive mode.
+   ```bash
+   chmod +x Zanahoria_*_amd64.AppImage
+   ./Zanahoria_*_amd64.AppImage
+   ```
+
+### Windows
+
+Download and run `Zanahoria_<version>_x64-setup.exe` (or the `.msi`). If
+SmartScreen warns that the app is unrecognized, click **More info → Run
+anyway**.
+
+### macOS
+
+1. Download `Zanahoria_<version>_universal.dmg` (works on Apple Silicon and
+   Intel Macs).
+2. Open the `.dmg` and drag **Zanahoria** to **Applications**.
+3. The app is not signed with an Apple Developer certificate, so the first
+   time macOS will block it ("Zanahoria is damaged" or "cannot be opened").
+   Allow it once, in either of these ways:
+   - Open **Terminal** and run:
+
+     ```bash
+     xattr -cr /Applications/Zanahoria.app
+     ```
+
+   - Or try to open the app, then go to **System Settings → Privacy &
+     Security** and click **Open Anyway**.
+
+After that it opens normally.
+
+### Updates
+
+On Linux and Windows, when Zanahoria starts it checks the latest GitHub release
+and, if there's a newer one, asks before installing it. The AppImage replaces
+itself and restarts; on Windows the installer runs in passive mode.
+
+On macOS the app does not update itself yet: download the new `.dmg`, replace
+the app in **Applications** and repeat the `xattr` step.
 
 ## Building from source
 
