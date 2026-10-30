@@ -195,6 +195,10 @@ export default function BackupView() {
               setStep("details");
             }}
             onAgain={reset}
+            onClose={() => {
+              reset();
+              useWorkspaces.getState().setActive("home");
+            }}
           />
         )}
       </div>
@@ -898,9 +902,8 @@ function RunningStep({ job }: { job: Job }) {
           })}
         </span>
       </div>
-      <p className="dim">{t("bk.run.keepOpen")}</p>
       <div className="bk-footer">
-        <TechDetails job={job} />
+        <p className="dim bk-keep-open">{t("bk.run.keepOpen")}</p>
         <span className="spacer" />
         <button
           className="danger"
@@ -914,6 +917,7 @@ function RunningStep({ job }: { job: Job }) {
           {t("bk.run.cancel")}
         </button>
       </div>
+      <TechDetails job={job} />
     </div>
   );
 }
@@ -922,10 +926,12 @@ function ResultStep({
   job,
   onRetry,
   onAgain,
+  onClose,
 }: {
   job: Job;
   onRetry: () => void;
   onAgain: () => void;
+  onClose: () => void;
 }) {
   const t = useT();
   const result = job.result!;
@@ -933,6 +939,7 @@ function ResultStep({
   const ws = useWorkspaces();
   const openDb = () => {
     ws.openWorkspace(job.connId, job.database);
+    onAgain();
   };
   const title: MessageKey = result.success
     ? job.action === "restore"
@@ -952,17 +959,20 @@ function ResultStep({
         <p className="dim bk-path">{job.file}</p>
       )}
       {!result.success && info.lastError && <pre className="bk-last-error">{info.lastError}</pre>}
-      <div className="bk-footer">
-        {job.log.length > 0 && <TechDetails job={job} open={!result.success && !info.known} />}
-        <span className="spacer" />
+      <div className="bk-result-actions">
         {!result.success && <button onClick={onRetry}>{t("bk.done.retry")}</button>}
         <button onClick={onAgain}>{t("bk.done.again")}</button>
-        {result.success && job.action === "restore" && (
+        {result.success && job.action === "restore" ? (
           <button className="primary" onClick={openDb}>
             {t("bk.done.open", { db: job.database })}
           </button>
+        ) : (
+          <button className="primary" onClick={onClose}>
+            {t("bk.done.close")}
+          </button>
         )}
       </div>
+      {job.log.length > 0 && <TechDetails job={job} open={!result.success && !info.known} />}
     </div>
   );
 }

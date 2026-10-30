@@ -1943,22 +1943,22 @@ body.col-dragging * {
   margin: 0 0 8px;
   font-size: 18px;
 }
-.bk-result .bk-footer {
-  text-align: left;
-  justify-content: center;
-}
-.bk-result .bk-footer .spacer {
-  display: none;
-}
-.bk-result .bk-tech {
-  flex-basis: 100%;
-  order: 2;
-}
-.bk-result .bk-footer {
+.bk-result-actions {
+  display: flex;
   flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
 }
-.bk-running .bk-footer {
-  align-items: flex-start;
+.bk-running .bk-tech,
+.bk-result .bk-tech {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+}
+.bk-keep-open {
+  margin: 0;
 }
 .bk-path {
   font-size: 12px;

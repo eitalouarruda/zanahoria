@@ -340,6 +340,7 @@ export const es: Record<MessageKey, string> = {
   "bk.done.cancelled": "Cancelado",
   "bk.done.retry": "Intentar de nuevo",
   "bk.done.again": "Empezar de nuevo",
+  "bk.done.close": "Finalizar",
   "bk.done.open": "Abrir «{db}»",
   "bk.ok.tables": "Se comprobaron las {n} tablas y están todas.",
   "bk.ok.backupTables": "El archivo fue comprobado: {n} tablas guardadas.",

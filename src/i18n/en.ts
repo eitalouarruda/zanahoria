@@ -352,6 +352,7 @@ export const en = {
   "bk.done.cancelled": "Cancelled",
   "bk.done.retry": "Try again",
   "bk.done.again": "Start over",
+  "bk.done.close": "Done",
   "bk.done.open": "Open “{db}”",
   "bk.ok.tables": "All {n} tables were checked and are in place.",
   "bk.ok.backupTables": "The file was checked: {n} tables saved.",
