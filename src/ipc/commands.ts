@@ -30,6 +30,11 @@ export const ipc = {
   connect: (connId: string, database?: string) =>
     invoke<ConnInfo>("connect", { connId, database }),
   disconnect: (connId: string) => invoke<void>("disconnect", { connId }),
+  /** Paquete cifrado `ZNH1.…` con las conexiones y sus passwords. */
+  exportConnections: (ids: string[], passphrase: string) =>
+    invoke<string>("export_connections", { ids, passphrase }),
+  decryptConnections: (token: string, passphrase: string) =>
+    invoke<ConnectionConfig[]>("decrypt_connections", { token, passphrase }),
 
   runQuery: (args: {
     queryId: string;
@@ -83,6 +88,7 @@ export const ipc = {
 
   saveTextFile: (path: string, content: string) =>
     invoke<void>("save_text_file", { path, content }),
+  readTextFile: (path: string) => invoke<string>("read_text_file", { path }),
   /** Re-ejecuta la query (solo lectura) y exporta todas sus filas. Cancelable con cancelQuery(exportId). */
   exportQuery: (args: {
     exportId: string;

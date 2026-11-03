@@ -83,3 +83,31 @@ pub async fn disconnect(state: State<'_, AppState>, conn_id: String) -> CmdResul
         .retain(|key, _| !key.starts_with(&format!("{conn_id}/")));
     Ok(())
 }
+
+/// Paquete cifrado (`ZNH1.…`) con las conexiones elegidas y sus passwords.
+/// Argon2 tarda: corre fuera del hilo de la UI.
+#[tauri::command]
+pub async fn export_connections(
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+    passphrase: String,
+) -> CmdResult<String> {
+    let configs = state.store.connections_with_passwords(&ids)?;
+    tauri::async_runtime::spawn_blocking(move || app_store::transfer::seal(configs, &passphrase))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(Into::into)
+}
+
+/// Descifra un paquete exportado; el frontend muestra el resultado antes de
+/// guardar nada.
+#[tauri::command]
+pub async fn decrypt_connections(
+    token: String,
+    passphrase: String,
+) -> CmdResult<Vec<ConnectionConfig>> {
+    tauri::async_runtime::spawn_blocking(move || app_store::transfer::open(&token, &passphrase))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(Into::into)
+}

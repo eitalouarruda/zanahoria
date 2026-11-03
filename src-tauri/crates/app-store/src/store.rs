@@ -179,6 +179,13 @@ impl AppStore {
         Ok(self.secrets.get(conn_id)?.filter(|pw| !pw.is_empty()))
     }
 
+    /// Conexiones con su password, para exportarlas (en el orden pedido).
+    pub fn connections_with_passwords(&self, ids: &[String]) -> Result<Vec<ConnectionConfig>> {
+        ids.iter()
+            .map(|id| self.connection_for_connect(id))
+            .collect()
+    }
+
     pub fn delete_connection(&self, conn_id: &str) -> Result<()> {
         self.lock()
             .execute("DELETE FROM connections WHERE id = ?1", params![conn_id])?;

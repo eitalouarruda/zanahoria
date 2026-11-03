@@ -12,10 +12,14 @@ use commands::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
+    // Cámara para importar conexiones por QR (solo existe en mobile).
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    builder
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let store = app_store::AppStore::open(&data_dir)
@@ -32,6 +36,8 @@ pub fn run() {
             connections::test_connection,
             connections::connect,
             connections::disconnect,
+            connections::export_connections,
+            connections::decrypt_connections,
             query::run_query,
             query::fetch_more,
             query::cancel_query,
@@ -47,6 +53,7 @@ pub fn run() {
             storage::save_favorite,
             storage::delete_favorite,
             storage::save_text_file,
+            storage::read_text_file,
             export::export_query,
             export::export_rows,
             storage::kv_get,

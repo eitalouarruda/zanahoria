@@ -4,6 +4,7 @@
 
 mod secrets;
 mod store;
+pub mod transfer;
 
 pub use secrets::{FileCipherStore, SecretStore};
 pub use store::{AppStore, FavoriteQuery, HistoryEntry, SavedConnection};

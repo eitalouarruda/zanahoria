@@ -4,6 +4,8 @@ import { useWorkspaces } from "../../stores/workspaceStore";
 import { ipc, errorMessage } from "../../ipc/commands";
 import type { ConnectionConfig, SavedConnection } from "../../ipc/types";
 import ConnectionForm from "./ConnectionForm";
+import ExportConnectionsDialog from "./ExportConnectionsDialog";
+import ImportConnectionsDialog from "./ImportConnectionsDialog";
 import { useT } from "../../i18n";
 import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
 import { matchesConnection } from "../../lib/connectionFilter";
@@ -37,6 +39,9 @@ export default function ConnectionManager() {
     { config: ConnectionConfig | null; group: string | null; hasPassword?: boolean } | null
   >(null);
   const [failure, setFailure] = useState<string | null>(null);
+  /** Diálogo de exportar (con las conexiones marcadas) o de importar. */
+  const [transfer, setTransfer] = useState<{ kind: "export"; ids: string[] } | { kind: "import" } | null>(null);
+  const [imported, setImported] = useState<string | null>(null);
   // Input inline para crear (key "") o renombrar (key = nombre actual) un grupo.
   const [groupDraft, setGroupDraft] = useState<{ from: string; value: string } | null>(null);
   // Enter/Escape desmontan el input y disparan un blur con el closure viejo;
@@ -224,6 +229,12 @@ export default function ConnectionManager() {
           {t("common.edit")}
         </button>
         <button
+          title={t("transfer.shareTitle")}
+          onClick={() => setTransfer({ kind: "export", ids: [conn.id] })}
+        >
+          {t("transfer.share")}
+        </button>
+        <button
           className="danger"
           onClick={() => {
             if (window.confirm(t("conn.confirmDelete", { name: conn.name }))) {
@@ -244,6 +255,20 @@ export default function ConnectionManager() {
         {!filtering && saved.length > 0 && keyFilter && (
           <span className="dim filter-hint">{t("conn.filterHint", { key: keyFilter })}</span>
         )}
+        <button
+          onClick={() => {
+            setImported(null);
+            setTransfer({ kind: "import" });
+          }}
+        >
+          {t("transfer.import")}
+        </button>
+        <button
+          disabled={saved.length === 0}
+          onClick={() => setTransfer({ kind: "export", ids: saved.map((c) => c.id) })}
+        >
+          {t("transfer.export")}
+        </button>
         <button onClick={() => setGroupDraft({ from: "", value: "" })}>
           {t("conn.newGroup")}
         </button>
@@ -266,6 +291,23 @@ export default function ConnectionManager() {
         />
       )}
       {failure && <div className="error-banner">{failure}</div>}
+      {imported && <div className="test-ok">{imported}</div>}
+      {transfer?.kind === "export" && (
+        <ExportConnectionsDialog
+          connections={saved}
+          initial={transfer.ids}
+          onClose={() => setTransfer(null)}
+        />
+      )}
+      {transfer?.kind === "import" && (
+        <ImportConnectionsDialog
+          onClose={() => setTransfer(null)}
+          onImported={(n) => {
+            setTransfer(null);
+            setImported(t("transfer.imported", { n }));
+          }}
+        />
+      )}
       {filtering && visible.length === 0 && saved.length > 0 && (
         <p className="dim">{t("conn.filterEmpty", { filter })}</p>
       )}

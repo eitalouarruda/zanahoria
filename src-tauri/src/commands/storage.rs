@@ -70,3 +70,19 @@ pub fn kv_set(
 ) -> CmdResult<()> {
     Ok(state.store.set_kv(&table, &key, &value)?)
 }
+
+/// Lee un archivo de texto elegido en el diálogo de abrir (ruta o, en
+/// Android, URI `content://`).
+#[tauri::command]
+pub fn read_text_file(app: tauri::AppHandle, path: String) -> CmdResult<String> {
+    use std::str::FromStr;
+    use tauri_plugin_fs::{FilePath, FsExt};
+    let file = FilePath::from_str(&path).map_err(|e| crate::error::CmdError {
+        message: format!("invalid path {path}: {e}"),
+    })?;
+    app.fs()
+        .read_to_string(file)
+        .map_err(|e| crate::error::CmdError {
+            message: format!("could not read {path}: {e}"),
+        })
+}
