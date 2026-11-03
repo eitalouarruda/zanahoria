@@ -13,15 +13,23 @@
 //!   (`/P`: solo la barra de progreso; `/UPDATE`: conserva datos y accesos;
 //!   `/R`: abre Zanahoria al terminar).
 //!
+//! - Android: no se puede reemplazar la app desde adentro sin permisos extra;
+//!   se abre la descarga del APK en el navegador y el usuario lo instala
+//!   (misma firma: Android lo trata como actualización y conserva los datos).
+//!
 //! La versión nueva arranca cuando este proceso ya terminó.
 //!
 //! En desarrollo no se busca nada, salvo con `ZANAHORIA_UPDATE_CHECK=1`.
 
+#[cfg(desktop)]
 use std::io::{Read, Write};
+#[cfg(desktop)]
 use std::path::{Path, PathBuf};
+#[cfg(desktop)]
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+#[cfg(desktop)]
 use serde::Serialize;
 use serde_json::Value;
 
@@ -30,29 +38,32 @@ const USER_AGENT: &str = "Zanahoria";
 
 /// Release más nueva que la instalada, con el archivo para este sistema.
 #[derive(Debug, Clone)]
+#[cfg_attr(mobile, allow(dead_code))]
 pub struct Release {
     pub version: String,
     asset_name: String,
-    asset_url: String,
+    pub asset_url: String,
     asset_size: u64,
 }
 
+#[cfg(desktop)]
 #[derive(Clone, Serialize)]
 pub struct Progress {
     pub downloaded: u64,
     pub total: u64,
 }
 
-/// Si esta instalación sabe actualizarse sola: una AppImage en Linux, siempre
-/// en Windows.
+/// Si esta instalación sabe actualizarse: una AppImage en Linux, siempre en
+/// Windows y Android.
 pub fn supported() -> bool {
     if cfg!(debug_assertions) && std::env::var_os("ZANAHORIA_UPDATE_CHECK").is_none() {
         return false;
     }
+    #[cfg(desktop)]
     if cfg!(target_os = "linux") {
         return appimage().is_some();
     }
-    cfg!(windows)
+    cfg!(any(windows, target_os = "android"))
 }
 
 /// La última release, si es más nueva que `current` y trae archivo para este
@@ -92,7 +103,9 @@ pub fn check(current: &str) -> Option<Release> {
 
 /// El archivo de la release que sirve aquí.
 fn is_installer(name: &str) -> bool {
-    if cfg!(windows) {
+    if cfg!(target_os = "android") {
+        name.ends_with("_android.apk")
+    } else if cfg!(windows) {
         name.ends_with("-setup.exe")
     } else {
         name.ends_with(".AppImage")
@@ -110,6 +123,7 @@ fn newer(a: &str, b: &str) -> bool {
 }
 
 /// La AppImage que se está ejecutando (la ruta la pone su runtime).
+#[cfg(desktop)]
 fn appimage() -> Option<PathBuf> {
     std::env::var_os("APPIMAGE")
         .map(PathBuf::from)
@@ -119,6 +133,7 @@ fn appimage() -> Option<PathBuf> {
 /// Descarga la release, la deja lista y programa el arranque de la versión
 /// nueva para cuando este proceso termine. Después hay que salir de la app.
 /// `progress` recibe lo descargado de vez en cuando.
+#[cfg(desktop)]
 pub fn install(
     release: &Release,
     current: &str,
@@ -144,6 +159,7 @@ pub fn install(
 
 /// Dónde queda la AppImage nueva: con la versión nueva en el nombre si la
 /// actual lleva la suya; si no, en el mismo sitio que la actual.
+#[cfg(desktop)]
 fn appimage_target(running: &Path, current: &str, version: &str) -> PathBuf {
     match running.file_name().and_then(|n| n.to_str()) {
         Some(name) if name.contains(current) => {
@@ -153,6 +169,7 @@ fn appimage_target(running: &Path, current: &str, version: &str) -> PathBuf {
     }
 }
 
+#[cfg(desktop)]
 fn download(release: &Release, path: &Path, progress: impl Fn(Progress)) -> Result<(), String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(15)))
@@ -191,7 +208,7 @@ fn download(release: &Release, path: &Path, progress: impl Fn(Progress)) -> Resu
 
 /// Linux: pone la AppImage en su sitio (ejecutable), borra la vieja si se
 /// llama distinto y arranca la nueva cuando Zanahoria termine.
-#[cfg(not(windows))]
+#[cfg(all(desktop, not(windows)))]
 fn finish(partial: &Path, destination: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::CommandExt;
@@ -230,7 +247,7 @@ fn finish(partial: &Path, destination: &Path) -> Result<(), String> {
 }
 
 /// `$1`: este proceso; `$2`: la AppImage nueva.
-#[cfg(not(windows))]
+#[cfg(all(desktop, not(windows)))]
 const RELAUNCH: &str = r#"
 while kill -0 "$1" 2>/dev/null; do sleep 0.3; done
 exec "$2"
@@ -281,6 +298,7 @@ mod tests {
         assert!(!newer("0.1.7", "0.1.8"));
     }
 
+    #[cfg(desktop)]
     #[test]
     fn names_the_new_appimage() {
         let dir = Path::new("/home/u/Applications");

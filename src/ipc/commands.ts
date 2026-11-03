@@ -114,7 +114,8 @@ export const ipc = {
   getPlatformCapabilities: () =>
     invoke<PlatformCapabilities>("get_platform_capabilities"),
 
-  checkUpdate: () => invoke<{ version: string } | null>("check_update"),
+  /** `manual`: Android, se abre la descarga del APK en vez de instalarse sola. */
+  checkUpdate: () => invoke<{ version: string; manual: boolean } | null>("check_update"),
   installUpdate: () => invoke<void>("install_update"),
 };
 

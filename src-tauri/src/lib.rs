@@ -1,7 +1,6 @@
 mod commands;
 mod error;
 mod state;
-#[cfg(desktop)]
 mod update;
 
 use tauri::Manager;
@@ -16,16 +15,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init());
-    // Cámara para importar conexiones por QR (solo existe en mobile).
+    // Solo en mobile: cámara para importar conexiones por QR y apertura de la
+    // descarga del APK nuevo.
     #[cfg(mobile)]
-    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    let builder = builder
+        .plugin(tauri_plugin_barcode_scanner::init())
+        .plugin(tauri_plugin_opener::init());
     builder
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let store = app_store::AppStore::open(&data_dir)
                 .map_err(|e| format!("failed to open app store: {e}"))?;
             app.manage(state::AppState::new(store));
-            #[cfg(desktop)]
             app.manage(update_cmd::UpdateState::default());
             Ok(())
         })
