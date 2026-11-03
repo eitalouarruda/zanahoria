@@ -262,9 +262,7 @@ fn decode_cell(row: &MySqlRow, i: usize, type_name: &str) -> DbValue {
         "TIME" => get!(chrono::NaiveTime, |v: chrono::NaiveTime| DbValue::Time(
             v.to_string()
         )),
-        "DATETIME" => get!(chrono::NaiveDateTime, |v: chrono::NaiveDateTime| {
-            DbValue::Timestamp(v.and_utc().to_rfc3339())
-        }),
+        "DATETIME" => get!(chrono::NaiveDateTime, DbValue::naive_timestamp),
         "TIMESTAMP" => get!(chrono::DateTime<chrono::Utc>, |v: chrono::DateTime<
             chrono::Utc,
         >| DbValue::Timestamp(

@@ -10,7 +10,7 @@ use crate::analyze::{EditTarget, Editability};
 use crate::config::Engine;
 use crate::driver::MutationStatement;
 use crate::error::{DbError, Result};
-use crate::value::DbValue;
+use crate::value::{timestamp_has_offset, DbValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -101,7 +101,8 @@ fn placeholder(engine: Engine, n: usize, value: &DbValue) -> String {
                 DbValue::Decimal(_) => "::numeric",
                 DbValue::Date(_) => "::date",
                 DbValue::Time(_) => "::time",
-                DbValue::Timestamp(_) => "::timestamptz",
+                DbValue::Timestamp(s) if timestamp_has_offset(s) => "::timestamptz",
+                DbValue::Timestamp(_) => "::timestamp",
                 DbValue::Uuid(_) => "::uuid",
                 _ => "",
             };
@@ -345,6 +346,28 @@ mod tests {
             r#"UPDATE "public"."customers" SET "name" = 'Ana' WHERE "id" = 7 AND "name" = 'Ann'"#
         );
         assert_eq!(st[0].expected_rows, Some(1));
+    }
+
+    #[test]
+    fn timestamp_cast_follows_offset() {
+        let change = PendingChange {
+            target: 0,
+            kind: ChangeKind::Update,
+            pk: HashMap::from([("id".into(), DbValue::Int(7))]),
+            values: HashMap::from([(
+                "created".into(),
+                DbValue::Timestamp("2026-11-02T18:52:18+00:00".into()),
+            )]),
+            old_values: HashMap::from([(
+                "created".into(),
+                DbValue::Timestamp("2026-11-02T18:52:18".into()),
+            )]),
+        };
+        let st = build_mutations(Engine::Postgres, &editability(), &[change], true).unwrap();
+        assert_eq!(
+            st[0].sql,
+            r#"UPDATE "public"."customers" SET "created" = $1::timestamptz WHERE "id" = $2 AND "created" = $3::timestamp"#
+        );
     }
 
     #[test]

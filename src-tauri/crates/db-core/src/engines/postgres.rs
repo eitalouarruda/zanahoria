@@ -302,9 +302,7 @@ fn decode_cell(row: &PgRow, i: usize, type_name: &str) -> DbValue {
         "TIME" => get!(chrono::NaiveTime, |v: chrono::NaiveTime| DbValue::Time(
             v.to_string()
         )),
-        "TIMESTAMP" => get!(chrono::NaiveDateTime, |v: chrono::NaiveDateTime| {
-            DbValue::Timestamp(v.and_utc().to_rfc3339())
-        }),
+        "TIMESTAMP" => get!(chrono::NaiveDateTime, DbValue::naive_timestamp),
         "TIMESTAMPTZ" => get!(chrono::DateTime<chrono::Utc>, |v: chrono::DateTime<
             chrono::Utc,
         >| DbValue::Timestamp(

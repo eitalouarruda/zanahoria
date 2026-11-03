@@ -6,6 +6,8 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
   drawSelection,
+  rectangularSelection,
+  crosshairCursor,
   type KeyBinding,
 } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
@@ -183,6 +185,11 @@ export default function SqlEditor({
         highlightActiveLine(),
         highlightActiveLineGutter(),
         drawSelection(),
+        // Multi-cursor estilo Sublime: Ctrl+D (siguiente ocurrencia),
+        // Ctrl+Shift+L (todas), Ctrl+clic y Alt+arrastre (rectangular).
+        EditorState.allowMultipleSelections.of(true),
+        rectangularSelection(),
+        crosshairCursor(),
         history(),
         indentOnInput(),
         bracketMatching(),
