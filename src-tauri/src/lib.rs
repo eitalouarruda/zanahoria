@@ -14,6 +14,8 @@ use commands::{
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let store = app_store::AppStore::open(&data_dir)

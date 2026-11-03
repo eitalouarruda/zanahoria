@@ -1,6 +1,7 @@
 use app_store::{FavoriteQuery, HistoryEntry};
 use tauri::State;
 
+use crate::commands::save_target::SaveTarget;
 use crate::error::CmdResult;
 use crate::state::AppState;
 
@@ -42,10 +43,13 @@ pub fn delete_favorite(state: State<'_, AppState>, id: String) -> CmdResult<()> 
 /// Guarda contenido exportado (CSV/JSON/SQL) en la ruta elegida por el
 /// usuario mediante el dialog de guardado.
 #[tauri::command]
-pub fn save_text_file(path: String, content: String) -> CmdResult<()> {
-    std::fs::write(&path, content).map_err(|e| crate::error::CmdError {
-        message: format!("could not write {path}: {e}"),
-    })
+pub fn save_text_file(app: tauri::AppHandle, path: String, content: String) -> CmdResult<()> {
+    let target = SaveTarget::new(&app, &path)?;
+    std::fs::write(target.local(), content)
+        .and_then(|()| target.commit(&app))
+        .map_err(|e| crate::error::CmdError {
+            message: format!("could not write {path}: {e}"),
+        })
 }
 
 #[tauri::command]

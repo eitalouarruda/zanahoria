@@ -14,6 +14,10 @@ import {
   pkValues,
   rowKey,
 } from "../../lib/editing";
+import { CSV_SEPARATORS, rowsToCsv } from "../../lib/csv";
+import { copyText } from "../../lib/clipboard";
+import { useIsMobileLayout } from "../../lib/layout";
+import ContextMenu from "../layout/ContextMenu";
 
 interface Props {
   /** Id del workspace en el store. */
@@ -32,6 +36,23 @@ const ROW_HEIGHT = 26;
 const MIN_COL_WIDTH = 40;
 /** Píxeles que hay que arrastrar una cabecera antes de empezar a moverla. */
 const DRAG_THRESHOLD = 5;
+/** Último separador usado al copiar como CSV. */
+const COPY_SEP_KEY = "zanahoria.copyCsvSeparator";
+
+/** Diálogo "copiar como CSV": cabecera elegida en el menú y separador. */
+interface CopyDialog {
+  header: boolean;
+  /** Separador de la lista o "custom". */
+  choice: string;
+  custom: string;
+}
+
+function initialCopyDialog(header: boolean): CopyDialog {
+  const last = localStorage.getItem(COPY_SEP_KEY) ?? ";";
+  return CSV_SEPARATORS.some((s) => s.value === last)
+    ? { header, choice: last, custom: "" }
+    : { header, choice: "custom", custom: last };
+}
 
 export default function ResultsGrid({
   wsId,
@@ -54,6 +75,21 @@ export default function ResultsGrid({
   } | null>(null);
   /** Celda activa (navegación con teclado). */
   const [cursor, setCursor] = useState<{ row: number; col: number } | null>(null);
+  const mobile = useIsMobileLayout();
+  /** Filas seleccionadas (índices originales) para copiar como CSV. */
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  /** Fila de referencia para Shift+clic. */
+  const anchor = useRef<number | null>(null);
+  /** Menú de clic derecho (mantener presionado en el teléfono). */
+  const [menu, setMenu] = useState<{ x: number; y: number; row: number; col: number | null; n: number } | null>(null);
+  const [copyDialog, setCopyDialog] = useState<CopyDialog | null>(null);
+  /** Aviso breve tras copiar. */
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 1800);
+    return () => window.clearTimeout(id);
+  }, [toast]);
 
   /** Orden por columna (clic en la cabecera: asc → desc → sin orden). */
   const [sort, setSort] = useState<GridSort | null>(null);
@@ -210,8 +246,12 @@ export default function ResultsGrid({
     overscan: 20,
   });
 
-  // Nueva consulta: el cursor anterior ya no aplica.
-  useEffect(() => setCursor(null), [tab.result.queryId]);
+  // Nueva consulta: el cursor y la selección anteriores ya no aplican.
+  useEffect(() => {
+    setCursor(null);
+    setSelected(new Set());
+    anchor.current = null;
+  }, [tab.result.queryId]);
 
   // Mantener la celda activa visible (vertical vía virtualizer, horizontal vía DOM).
   useEffect(() => {
@@ -251,6 +291,54 @@ export default function ResultsGrid({
       return change.values[colIndex];
     }
     return editedValue(editability, edited, rows[rowIndex], colIndex) ?? rows[rowIndex][colIndex];
+  };
+
+  /**
+   * Selección de filas: clic = solo esa fila; Ctrl (o `toggle`, en el
+   * teléfono) = la agrega o la quita; Shift = rango desde la última elegida.
+   */
+  const selectRow = (
+    row: number,
+    e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean },
+    toggle = false,
+  ) => {
+    const from = anchor.current;
+    if (e.shiftKey && from !== null && posOf.has(from) && posOf.has(row)) {
+      const [a, b] = [posOf.get(from)!, posOf.get(row)!].sort((x, y) => x - y);
+      setSelected(new Set(view.slice(a, b + 1)));
+      return;
+    }
+    anchor.current = row;
+    setSelected((prev) => {
+      if (!toggle && !e.ctrlKey && !e.metaKey) return new Set([row]);
+      const next = new Set(prev);
+      if (next.has(row)) next.delete(row);
+      else next.add(row);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    anchor.current = null;
+  };
+
+  /** Copia las filas seleccionadas (orden y columnas visibles del grid). */
+  const copySelection = async (dialog: CopyDialog) => {
+    const sep = dialog.choice === "custom" ? dialog.custom : dialog.choice;
+    if (!sep) return;
+    const picked = view.filter((r) => selected.has(r));
+    const header = dialog.header ? visibleCols.map((c) => columns[c].name) : null;
+    const data = picked.map((r) => visibleCols.map((c) => cellValue(r, c)));
+    setCopyDialog(null);
+    localStorage.setItem(COPY_SEP_KEY, sep);
+    try {
+      await copyText(rowsToCsv(header, data, sep));
+      setToast(t("grid.copied", { n: picked.length }));
+    } catch (e) {
+      setToast(String(e));
+    }
+    parentRef.current?.focus();
   };
 
   /** `typed`: edición iniciada escribiendo; esa tecla reemplaza el valor. */
@@ -379,11 +467,16 @@ export default function ResultsGrid({
         else moveTo(cur.row, cur.col);
         break;
       case "Escape":
-        setCursor(null);
+        if (selected.size > 0) clearSelection();
+        else setCursor(null);
         break;
       default:
-        if (mod && e.key.toLowerCase() === "c" && cursorShown && cursor) {
-          void navigator.clipboard.writeText(dbValueToDisplay(cellValue(cursor.row, cursor.col)));
+        if (mod && e.key.toLowerCase() === "a") {
+          setSelected(new Set(view));
+        } else if (mod && e.key.toLowerCase() === "c" && selected.size > 0) {
+          setCopyDialog(initialCopyDialog(true));
+        } else if (mod && e.key.toLowerCase() === "c" && cursorShown && cursor) {
+          void copyText(dbValueToDisplay(cellValue(cursor.row, cursor.col)));
         } else if (cursorShown && cursor && !mod && !e.altKey && e.key.length === 1) {
           // Escribir sobre la celda empieza a editarla con esa tecla.
           startEdit(cursor.row, cursor.col, e.key);
@@ -394,7 +487,10 @@ export default function ResultsGrid({
     if (handled) e.preventDefault();
   };
 
+  const allSelected = totalRows > 0 && selected.size === totalRows;
+
   return (
+    <>
     <div
       className="grid-container"
       ref={parentRef}
@@ -404,6 +500,13 @@ export default function ResultsGrid({
       <table className="results-grid">
         <thead>
           <tr>
+            <th
+              className="row-num"
+              title={t("grid.selectAllTitle")}
+              onClick={() => (allSelected ? clearSelection() : setSelected(new Set(view)))}
+            >
+              {selected.size > 0 ? selected.size : "#"}
+            </th>
             <th className="row-actions-header" />
             {visibleCols.map((colIndex) => {
               const c = columns[colIndex];
@@ -454,6 +557,7 @@ export default function ResultsGrid({
           </tr>
           {rowFilters && (
             <tr className="filter-row">
+              <th className="row-num" />
               <th className="row-actions-header" />
               {visibleCols.map((colIndex) => (
                 <th key={keys[colIndex]} style={widthStyle(colIndex)}>
@@ -483,12 +587,36 @@ export default function ResultsGrid({
                   isInsert ? "row-insert" : "",
                   deleted ? "row-deleted" : "",
                   change?.kind === "update" ? "row-changed" : "",
+                  selected.has(rowIndex) ? "row-selected" : "",
                 ].join(" ")}
                 style={{
                   transform: `translateY(${virtualRow.start}px)`,
                   height: ROW_HEIGHT,
                 }}
+                onContextMenu={(e) => {
+                  if ((e.target as HTMLElement).closest("input")) return;
+                  e.preventDefault();
+                  const td = (e.target as HTMLElement).closest<HTMLElement>("td[data-col]");
+                  const inSelection = selected.has(rowIndex);
+                  if (!inSelection) {
+                    anchor.current = rowIndex;
+                    setSelected(new Set([rowIndex]));
+                  }
+                  setMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    row: rowIndex,
+                    col: td ? Number(td.dataset.col) : null,
+                    n: inSelection ? selected.size : 1,
+                  });
+                }}
               >
+                <td
+                  className="row-num"
+                  onClick={(e) => selectRow(rowIndex, e, mobile)}
+                >
+                  {virtualRow.index + 1}
+                </td>
                 <td className="row-actions">
                   {editability?.rowTarget != null &&
                     (isInsert ? (
@@ -530,7 +658,13 @@ export default function ResultsGrid({
                       ].join(" ")}
                       data-row={rowIndex}
                       data-col={colIndex}
-                      onMouseDown={() => {
+                      onMouseDown={(e) => {
+                        if (e.button === 0 && !isEditing) {
+                          if (e.shiftKey || e.ctrlKey || e.metaKey) selectRow(rowIndex, e);
+                          // En el teléfono, con filas elegidas, tocar suma o quita filas.
+                          else if (mobile && selected.size > 0) selectRow(rowIndex, e, true);
+                          else if (selected.size > 0) clearSelection();
+                        }
                         if (!isEditing) setCursor({ row: rowIndex, col: colIndex });
                       }}
                       onDoubleClick={() => startEdit(rowIndex, colIndex)}
@@ -568,5 +702,104 @@ export default function ResultsGrid({
         </tbody>
       </table>
     </div>
+    {menu && (
+      <ContextMenu
+        x={menu.x}
+        y={menu.y}
+        onClose={() => setMenu(null)}
+        items={[
+          {
+            label: t("grid.copyCsvHeader", { n: menu.n }),
+            onSelect: () => setCopyDialog(initialCopyDialog(true)),
+          },
+          {
+            label: t("grid.copyCsvNoHeader", { n: menu.n }),
+            onSelect: () => setCopyDialog(initialCopyDialog(false)),
+          },
+          ...(menu.col !== null
+            ? [
+                {
+                  label: t("grid.copyValue"),
+                  onSelect: () => {
+                    void copyText(dbValueToDisplay(cellValue(menu.row, menu.col!))).then(() =>
+                      setToast(t("grid.copiedValue")),
+                    );
+                  },
+                },
+              ]
+            : []),
+          {
+            label: t("grid.clearSelection"),
+            disabled: selected.size === 0,
+            onSelect: clearSelection,
+          },
+        ]}
+      />
+    )}
+    {copyDialog && (() => {
+      const sep = copyDialog.choice === "custom" ? copyDialog.custom : copyDialog.choice;
+      const n = view.filter((r) => selected.has(r)).length;
+      const confirm = () => void copySelection(copyDialog);
+      return (
+        <div className="modal-backdrop" onClick={() => setCopyDialog(null)}>
+          <form
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setCopyDialog(null);
+                parentRef.current?.focus();
+              }
+            }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              confirm();
+            }}
+          >
+            <h3>
+              {copyDialog.header
+                ? t("grid.copyCsvHeader", { n })
+                : t("grid.copyCsvNoHeader", { n })}
+            </h3>
+            <label className="csv-separator">
+              {t("export.separator")}
+              <select
+                autoFocus
+                value={copyDialog.choice}
+                onChange={(e) => setCopyDialog({ ...copyDialog, choice: e.target.value })}
+              >
+                {CSV_SEPARATORS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {t(s.label)}
+                  </option>
+                ))}
+                <option value="custom">{t("export.sepCustom")}</option>
+              </select>
+              {copyDialog.choice === "custom" && (
+                <input
+                  autoFocus
+                  maxLength={5}
+                  value={copyDialog.custom}
+                  onChange={(e) => setCopyDialog({ ...copyDialog, custom: e.target.value })}
+                />
+              )}
+            </label>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setCopyDialog(null)}>
+                {t("common.cancel")}
+              </button>
+              <button type="submit" className="primary" disabled={!sep || n === 0}>
+                {t("grid.copy")}
+              </button>
+            </div>
+          </form>
+        </div>
+      );
+    })()}
+    {toast && <div className="grid-toast">{toast}</div>}
+    </>
   );
 }

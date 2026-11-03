@@ -28,7 +28,7 @@ jobs:
       - name: Install Tauri Linux deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev
       - name: Start test databases
         run: docker compose up -d --wait
       - name: Format check
@@ -119,7 +119,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev
       - run: pnpm install --frozen-lockfile
       - name: Set release version
         shell: bash
@@ -164,9 +164,79 @@ jobs:
           ARCH=x86_64 "$work/appimagetool" --appimage-extract-and-run "$work/squashfs-root" "$img"
           gh release upload "v${VERSION}" "$img" --clobber --repo "${{ github.repository }}"
 
+  # APK universal (arm64 + armv7) firmado con el keystore de los secrets
+  # ANDROID_KEY_BASE64 (zanahoria-release.p12 en base64) y ANDROID_KEY_PASSWORD.
+  build-android:
+    needs: release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # El runner trae el SDK; se asegura la plataforma que pide compileSdk.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+      - run: pnpm install --frozen-lockfile
+      - name: Set release version
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = "src-tauri/tauri.conf.json";
+            const c = JSON.parse(fs.readFileSync(p, "utf8"));
+            c.version = process.env.VERSION;
+            fs.writeFileSync(p, JSON.stringify(c, null, 2));
+          '
+      - name: Configure signing
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEY_BASE64" || { echo "::error::falta el secret ANDROID_KEY_BASE64"; exit 1; }
+          cd src-tauri/gen/android
+          echo "$ANDROID_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/zanahoria-release.p12"
+          {
+            echo "keyAlias=zanahoria"
+            echo "password=$ANDROID_KEY_PASSWORD"
+            echo "storeFile=$RUNNER_TEMP/zanahoria-release.p12"
+          } > keystore.properties
+      - name: Build APK
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          pnpm tauri android build --apk --target aarch64 --target armv7
+      - name: Upload APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          apk="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk"
+          out="Zanahoria_${VERSION}_android.apk"
+          cp "$apk" "$out"
+          gh release upload "v${VERSION}" "$out" --clobber --repo "${{ github.repository }}"
+
   # Publica la release solo si todos los builds terminaron bien.
   publish:
-    needs: [release, build-desktop]
+    needs: [release, build-desktop, build-android]
     runs-on: ubuntu-22.04
     permissions:
       contents: write

@@ -4,6 +4,7 @@ pub mod export;
 pub mod mutations;
 pub mod platform;
 pub mod query;
+pub mod save_target;
 pub mod schema;
 pub mod storage;
 pub mod update_cmd;

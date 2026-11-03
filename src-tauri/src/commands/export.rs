@@ -17,6 +17,7 @@ use rust_xlsxwriter::{Format, Workbook, Worksheet, XlsxError};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 
+use crate::commands::save_target::SaveTarget;
 use crate::error::{CmdError, CmdResult};
 use crate::state::{AppState, RunningQuery};
 
@@ -103,12 +104,14 @@ pub async fn export_query(
     );
 
     let options = options.unwrap_or_default();
-    let target = path.clone();
+    let target = SaveTarget::new(&app, &path)?;
+    let local = target.local().to_string_lossy().into_owned();
     let id = export_id.clone();
+    let emitter = app.clone();
     // La escritura (y el armado del XLSX) es bloqueante: va en su propio hilo.
     let result = tauri::async_runtime::spawn_blocking(move || {
-        write_stream(&mut stream.events, format, &target, &options, |rows| {
-            let _ = app.emit(
+        write_stream(&mut stream.events, format, &local, &options, |rows| {
+            let _ = emitter.emit(
                 "export:progress",
                 ExportProgress {
                     export_id: id.clone(),
@@ -125,9 +128,14 @@ pub async fn export_query(
 
     state.queries.lock().unwrap().remove(&export_id);
     match result {
-        Ok(rows) => Ok(ExportSummary { rows }),
+        Ok(rows) => {
+            target.commit(&app).map_err(|e| CmdError {
+                message: format!("could not write {path}: {e}"),
+            })?;
+            Ok(ExportSummary { rows })
+        }
         Err(e) => {
-            let _ = std::fs::remove_file(&path);
+            target.discard();
             Err(e)
         }
     }
@@ -174,6 +182,7 @@ fn write_stream(
 /// Exporta filas ya cargadas en el frontend (resultado completo).
 #[tauri::command]
 pub async fn export_rows(
+    app: tauri::AppHandle,
     path: String,
     format: ExportFormat,
     columns: Vec<ColumnMeta>,
@@ -181,8 +190,16 @@ pub async fn export_rows(
     options: Option<ExportOptions>,
 ) -> CmdResult<ExportSummary> {
     let options = options.unwrap_or_default();
+    let target = SaveTarget::new(&app, &path)?;
     tauri::async_runtime::spawn_blocking(move || {
-        write_all(format, &path, &options, &columns, &rows).map_err(|e| write_error(&path, e))?;
+        let local = target.local().to_string_lossy().into_owned();
+        if let Err(e) = write_all(format, &local, &options, &columns, &rows) {
+            target.discard();
+            return Err(write_error(&path, e));
+        }
+        target
+            .commit(&app)
+            .map_err(|e| write_error(&path, e.into()))?;
         Ok(ExportSummary {
             rows: rows.len() as u64,
         })

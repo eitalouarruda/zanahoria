@@ -16,12 +16,14 @@ import type { QueryEvent } from "./ipc/types";
 import { useShortcuts } from "./lib/shortcuts";
 import { useApplyTheme } from "./lib/theme";
 import { useApplyUiZoom } from "./lib/uiZoom";
+import { useApplyLayout } from "./lib/layout";
 
 export default function App() {
   const load = useConnections((s) => s.load);
   const { workspaces, active } = useWorkspaces();
   useApplyTheme();
   useApplyUiZoom();
+  useApplyLayout();
 
   useEffect(() => {
     void load();

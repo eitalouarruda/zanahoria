@@ -34,6 +34,8 @@ db-core = { path = "crates/db-core" }
 app-store = { path = "crates/app-store" }
 rust_xlsxwriter = { version = "0.100.0", features = ["chrono", "constant_memory"] }
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+tauri-plugin-fs = "2"
+tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 backup = { path = "crates/backup" }

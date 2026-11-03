@@ -4,3 +4,9 @@ src-tauri/target/
 src-tauri/gen/schemas/
 *.local
 .DS_Store
+
+# Firma Android: keystore y credenciales locales, nunca versionados.
+*.p12
+*.jks
+*.keystore
+keystore.properties

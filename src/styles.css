@@ -151,6 +151,11 @@ select:focus {
   flex: 1;
 }
 
+/* Agrupa los workspaces del rail solo en el teléfono (ver Mobile). */
+.rail-conns {
+  display: contents;
+}
+
 .workspace {
   flex: 1;
   display: flex;
@@ -758,6 +763,49 @@ select:focus {
   background: rgba(76, 175, 80, 0.1);
 }
 
+/* Número de fila: clic para seleccionarla (copiar como CSV). */
+.results-grid th.row-num,
+.results-grid td.row-num {
+  flex: 0 0 48px;
+  min-width: 48px;
+  max-width: 48px;
+  padding: 0 6px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.results-grid td.row-num:hover,
+.results-grid th.row-num:hover {
+  color: var(--fg);
+}
+
+.results-grid tr.row-selected td {
+  background: rgba(232, 132, 60, 0.16);
+}
+
+.results-grid tr.row-selected td.row-num {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.grid-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  z-index: 200;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  color: var(--fg);
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
 .pk-badge {
   font-size: 9px;
   color: var(--yellow);
@@ -962,22 +1010,6 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* ---- Mobile ---- */
-@media (max-width: 700px) {
-  .sidebar {
-    width: 44px;
-  }
-
-  .connection-manager,
-  .global-view {
-    padding: 12px;
-  }
-
-  .conn-actions {
-    flex-direction: column;
-  }
 }
 
 /* ---- Database picker (Ctrl+K) ---- */
@@ -1994,4 +2026,238 @@ body.col-dragging * {
   color: var(--fg-strong);
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ---- Mobile (teléfono) ----
+ * Activo con <html data-layout="mobile"> (lib/layout.ts: pantalla angosta y
+ * puntero táctil). Nada de esto aplica en desktop. */
+:root[data-layout="mobile"] {
+  font-size: 15px;
+}
+
+/* Rail → barra de navegación inferior. */
+:root[data-layout="mobile"] .app-shell {
+  flex-direction: column-reverse;
+}
+
+:root[data-layout="mobile"] .sidebar {
+  width: 100%;
+  flex-direction: row;
+  padding: 4px 6px;
+  border-right: none;
+  border-top: 1px solid var(--border);
+}
+
+:root[data-layout="mobile"] .rail-sep {
+  width: 0;
+  height: 26px;
+  border-top: none;
+  border-left: 1px solid var(--border);
+  margin: 0 2px;
+}
+
+:root[data-layout="mobile"] .rail-spacer {
+  display: none;
+}
+
+:root[data-layout="mobile"] .rail-conns {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+:root[data-layout="mobile"] .rail-conn {
+  width: 56px;
+  flex-shrink: 0;
+}
+
+:root[data-layout="mobile"] .rail-conn-label {
+  max-width: 56px;
+}
+
+:root[data-layout="mobile"] .rail-btn {
+  flex-shrink: 0;
+}
+
+:root[data-layout="mobile"] .workspace {
+  min-height: 0;
+}
+
+/* Vistas globales. */
+:root[data-layout="mobile"] .connection-manager,
+:root[data-layout="mobile"] .global-view {
+  padding: 12px;
+}
+
+:root[data-layout="mobile"] .cm-header {
+  flex-wrap: wrap;
+}
+
+:root[data-layout="mobile"] .connection-card {
+  flex-wrap: wrap;
+  padding: 10px 12px;
+}
+
+:root[data-layout="mobile"] .conn-details {
+  flex: 1 1 60%;
+}
+
+:root[data-layout="mobile"] .conn-actions {
+  flex-wrap: wrap;
+}
+
+/* Sin hover en pantallas táctiles: las acciones se ven siempre. */
+:root[data-layout="mobile"] .group-actions,
+:root[data-layout="mobile"] .chip-remove {
+  opacity: 1;
+}
+
+:root[data-layout="mobile"] .connection-form .form-row {
+  flex-wrap: wrap;
+}
+
+:root[data-layout="mobile"] .settings-row {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+:root[data-layout="mobile"] .shortcut-row {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+:root[data-layout="mobile"] .settings-row select,
+:root[data-layout="mobile"] .settings-row input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Workspace: header en dos filas, tabs con scroll horizontal. */
+:root[data-layout="mobile"] .workspace-header {
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 8px 0;
+}
+
+:root[data-layout="mobile"] .workspace-header select {
+  min-width: 0;
+  max-width: 50%;
+}
+
+:root[data-layout="mobile"] .tab-bar {
+  flex-basis: 100%;
+  scrollbar-width: none;
+}
+
+:root[data-layout="mobile"] .tab {
+  padding: 6px 10px;
+}
+
+:root[data-layout="mobile"] .tab-close {
+  padding: 0 4px;
+  font-size: 16px;
+}
+
+/* Selector Esquema / Query / Resultados. */
+.mobile-views {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.mobile-views button {
+  flex: 1;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 8px 4px;
+  font-size: 14px;
+  color: var(--fg-dim);
+}
+
+.mobile-views button.active {
+  border-bottom-color: var(--accent);
+  color: var(--fg);
+}
+
+.mobile-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-view > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.mobile-view[hidden] {
+  display: none;
+}
+
+/* La toolbar se parte en filas: con scroll horizontal los desplegables
+ * (favoritas / historial) quedarían recortados. */
+:root[data-layout="mobile"] .editor-toolbar,
+:root[data-layout="mobile"] .results-toolbar,
+:root[data-layout="mobile"] .results-status {
+  flex-wrap: wrap;
+}
+
+:root[data-layout="mobile"] .editor-toolbar .spacer {
+  display: none;
+}
+
+:root[data-layout="mobile"] .column-filter-input {
+  width: 100%;
+}
+
+/* Desplegables y modales como hojas a lo ancho de la pantalla. */
+:root[data-layout="mobile"] .toolbar-dropdown-panel {
+  position: fixed;
+  top: auto;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: auto;
+  max-height: 60vh;
+}
+
+:root[data-layout="mobile"] .modal {
+  min-width: 0;
+  width: calc(100vw - 16px);
+  max-width: none;
+  max-height: calc(100% - 16px);
+  padding: 14px;
+  overflow-y: auto;
+}
+
+:root[data-layout="mobile"] .modal-actions {
+  flex-wrap: wrap;
+}
+
+:root[data-layout="mobile"] .picker-backdrop {
+  padding-top: 8px;
+}
+
+/* Botones con área táctil cómoda. */
+:root[data-layout="mobile"] button {
+  min-height: 34px;
+}
+
+:root[data-layout="mobile"] .results-toolbar button,
+:root[data-layout="mobile"] .tab-close,
+:root[data-layout="mobile"] .row-actions button {
+  min-height: 0;
 }

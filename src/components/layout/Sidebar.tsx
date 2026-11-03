@@ -3,6 +3,7 @@ import { useConnections } from "../../stores/connectionsStore";
 import { useWorkspaces, workspacePending } from "../../stores/workspaceStore";
 import ContextMenu from "./ContextMenu";
 import { useT } from "../../i18n";
+import { useIsMobileLayout } from "../../lib/layout";
 
 const ENGINE_ICONS: Record<string, string> = {
   postgres: "🐘",
@@ -19,6 +20,8 @@ export default function Sidebar() {
   const { workspaces, order, active, setActive, closeWorkspace } = useWorkspaces();
   const [menu, setMenu] = useState<{ wsId: string; x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  // En el teléfono el rail es una barra inferior; backup no existe en Android.
+  const mobile = useIsMobileLayout();
 
   /** Cierra los workspaces, confirmando antes si alguno tiene cambios sin aplicar. */
   const closeAll = (ids: string[]) => {
@@ -37,32 +40,35 @@ export default function Sidebar() {
         🥕
       </button>
       <div className="rail-sep" />
-      {order.map((wsId) => {
-        const ws = workspaces[wsId];
-        const conn = saved.find((c) => c.id === ws?.connId);
-        const label = ws?.database || conn?.name || "";
-        return (
-          <button
-            key={wsId}
-            className={`rail-conn ${active === wsId ? "active" : ""}`}
-            title={`${conn?.name ?? ws?.connId}${ws?.database ? ` / ${ws.database}` : ""}\n${t("sidebar.rightClick")}`}
-            onClick={() => setActive(wsId)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setMenu({ wsId, x: e.clientX, y: e.clientY });
-            }}
-          >
-            <span
-              className="rail-conn-icon"
-              // Color de la conexión como franja inferior; el borde marca la activa.
-              style={conn?.color ? { boxShadow: `inset 0 -3px 0 ${conn.color}` } : undefined}
+      {/* En desktop no agrupa nada (display: contents); en el teléfono scrollea. */}
+      <div className="rail-conns">
+        {order.map((wsId) => {
+          const ws = workspaces[wsId];
+          const conn = saved.find((c) => c.id === ws?.connId);
+          const label = ws?.database || conn?.name || "";
+          return (
+            <button
+              key={wsId}
+              className={`rail-conn ${active === wsId ? "active" : ""}`}
+              title={`${conn?.name ?? ws?.connId}${ws?.database ? ` / ${ws.database}` : ""}\n${t("sidebar.rightClick")}`}
+              onClick={() => setActive(wsId)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ wsId, x: e.clientX, y: e.clientY });
+              }}
             >
-              {ENGINE_ICONS[conn?.engine ?? ""] ?? "🗄"}
-            </span>
-            <span className="rail-conn-label">{label}</span>
-          </button>
-        );
-      })}
+              <span
+                className="rail-conn-icon"
+                // Color de la conexión como franja inferior; el borde marca la activa.
+                style={conn?.color ? { boxShadow: `inset 0 -3px 0 ${conn.color}` } : undefined}
+              >
+                {ENGINE_ICONS[conn?.engine ?? ""] ?? "🗄"}
+              </span>
+              <span className="rail-conn-label">{label}</span>
+            </button>
+          );
+        })}
+      </div>
       <div className="rail-spacer" />
       <button
         className={`rail-btn ${active === "favorites" ? "active" : ""}`}
@@ -78,13 +84,15 @@ export default function Sidebar() {
       >
         🕘
       </button>
-      <button
-        className={`rail-btn ${active === "backup" ? "active" : ""}`}
-        title={t("sidebar.backup")}
-        onClick={() => setActive("backup")}
-      >
-        💾
-      </button>
+      {!mobile && (
+        <button
+          className={`rail-btn ${active === "backup" ? "active" : ""}`}
+          title={t("sidebar.backup")}
+          onClick={() => setActive("backup")}
+        >
+          💾
+        </button>
+      )}
       <button
         className={`rail-btn ${active === "settings" ? "active" : ""}`}
         title={t("sidebar.settings")}

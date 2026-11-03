@@ -14,7 +14,9 @@ import { ipc, errorMessage } from "../../ipc/commands";
 import type { Engine, FavoriteQuery, MutationPreview } from "../../ipc/types";
 import { beautify, uglify } from "../../lib/format";
 import { exportTableName } from "../../lib/editing";
+import { CSV_SEPARATORS } from "../../lib/csv";
 import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
+import { useIsMobileLayout } from "../../lib/layout";
 import { useT, type MessageKey } from "../../i18n";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -28,13 +30,6 @@ import {
 /** Valor centinela de la opción "nueva database" del selector del header. */
 const NEW_DB_OPTION = "\u0000new-database";
 
-/** Separadores de CSV ofrecidos en el diálogo de exportación. */
-const CSV_SEPARATORS: { value: string; label: MessageKey }[] = [
-  { value: ";", label: "export.sepSemicolon" },
-  { value: ",", label: "export.sepComma" },
-  { value: "\t", label: "export.sepTab" },
-  { value: "|", label: "export.sepPipe" },
-];
 import SqlEditor, { type EditorApi } from "../editor/SqlEditor";
 import ResultsGrid from "../grid/ResultsGrid";
 import SchemaTree from "../schema/SchemaTree";
@@ -45,6 +40,14 @@ import { FavoritesMenu, HistoryMenu } from "./QueryMenus";
 interface Props {
   workspace: Workspace;
 }
+
+/** Vistas del workspace en el teléfono, una a la vez. */
+type MobileView = "schema" | "editor" | "results";
+const MOBILE_VIEWS: { id: MobileView; label: MessageKey }[] = [
+  { id: "schema", label: "ws.viewSchema" },
+  { id: "editor", label: "ws.viewEditor" },
+  { id: "results", label: "ws.viewResults" },
+];
 
 export default function WorkspaceView({ workspace }: Props) {
   // wsId: clave del workspace en el store (conexión + database);
@@ -130,7 +133,12 @@ export default function WorkspaceView({ workspace }: Props) {
   const previewPane = useRef<string | null>(null);
   // Panel con foco cuando hay split: la toolbar y los atajos actúan sobre él.
   const [focusedSplit, setFocusedSplit] = useState(false);
-  const pane: QueryTab | undefined = focusedSplit && tab?.split ? tab.split : tab;
+  const mobile = useIsMobileLayout();
+  /** Split del tab activo: en el teléfono no hay lugar para dos paneles. */
+  const split = mobile ? undefined : tab?.split;
+  /** Vista visible en el teléfono (en desktop se ven todas a la vez). */
+  const [mobileView, setMobileView] = useState<MobileView>("editor");
+  const pane: QueryTab | undefined = focusedSplit && split ? split : tab;
   const apiFor = (p: QueryTab) => (p.id === tab?.id ? editorApi : splitApi);
 
   // Al llegar a este workspace con una petición de foco pendiente (Ctrl+K),
@@ -173,6 +181,7 @@ export default function WorkspaceView({ workspace }: Props) {
     const api = apiFor(p).current;
     const sel = selection ?? api?.getSelection();
     const selFrom = selection !== undefined ? from : api?.selectionFrom();
+    if (mobile) setMobileView("results");
     void ws.runQuery(wsId, p.id, confirmDangerous, sel || undefined, sel ? selFrom : undefined);
   };
   /** Repite lo último ejecutado en el panel (o todo su editor). */
@@ -194,13 +203,13 @@ export default function WorkspaceView({ workspace }: Props) {
     preview !== null || favName !== null || newDb !== null || showDbPicker || exportDialog !== null || autoRunDialog !== null;
 
   /** Split: cambia el panel activo y lleva el foco a su editor. */
-  const focusPane = (split: boolean) => {
-    if (!tab?.split) return;
-    setFocusedSplit(split);
-    requestAnimationFrame(() => (split ? splitApi : editorApi).current?.focus());
+  const focusPane = (right: boolean) => {
+    if (!split) return;
+    setFocusedSplit(right);
+    requestAnimationFrame(() => (right ? splitApi : editorApi).current?.focus());
   };
   const toggleSplit = () => {
-    if (!tab) return;
+    if (!tab || mobile) return;
     const opening = !tab.split;
     ws.setTabSplit(wsId, tab.id, opening);
     setFocusedSplit(opening);
@@ -244,10 +253,10 @@ export default function WorkspaceView({ workspace }: Props) {
       pane && ws.setTabSql(wsId, pane.id, uglify(pane.sql)) },
     { action: "openDatabase", enabled: !!info?.capabilities.multipleDatabases, run: () =>
       setShowDbPicker(true) },
-    { action: "toggleSplit", enabled: !!tab, run: toggleSplit },
+    { action: "toggleSplit", enabled: !!tab && !mobile, run: toggleSplit },
     // Estilo tmux: Ctrl+Space y luego ← / →.
-    { action: "focusLeftPane", enabled: !!tab?.split, run: () => focusPane(false) },
-    { action: "focusRightPane", enabled: !!tab?.split, run: () => focusPane(true) },
+    { action: "focusLeftPane", enabled: !!split, run: () => focusPane(false) },
+    { action: "focusRightPane", enabled: !!split, run: () => focusPane(true) },
     // "Logout": cierra el workspace y desconecta.
     { action: "closeWorkspace", run: () => closeWorkspace() },
   ]);
@@ -271,6 +280,7 @@ export default function WorkspaceView({ workspace }: Props) {
       engine === "mysql" || engine === "mariadb" ? `\`${id}\`` : `"${id}"`;
     const name = namespace ? `${q(namespace)}.${q(table)}` : q(table);
     ws.addTab(wsId, table, `SELECT * FROM ${name} LIMIT 500;`);
+    if (mobile) setMobileView("results");
     // ejecutar cuando el tab exista
     setTimeout(() => {
       const current = useWorkspaces.getState().workspaces[wsId];
@@ -378,10 +388,26 @@ export default function WorkspaceView({ workspace }: Props) {
     };
   }, [exporting?.id]);
 
-  /** Columna de un panel: su editor arriba y su grid de resultados abajo. */
-  const renderColumn = (p: QueryTab, isSplit: boolean) => {
+  /** Editor SQL de un panel. */
+  const renderEditor = (p: QueryTab, isSplit: boolean) => (
+    <div className="editor-panes">
+      <SqlEditor
+        value={p.sql}
+        engine={engine}
+        schema={schema}
+        onChange={(sql) => ws.setTabSql(wsId, p.id, sql)}
+        onRun={(selection, from) =>
+          selection === undefined ? run(p, false, p.sql, 0) : run(p, false, selection, from)
+        }
+        apiRef={isSplit ? splitApi : editorApi}
+        errorAt={p.result.errorAt?.offset ?? null}
+      />
+    </div>
+  );
+
+  /** Toolbar, banners, grid y estado del resultado de un panel. */
+  const renderResults = (p: QueryTab, isSplit: boolean) => {
     const pending = pendingOf(p);
-    const focused = !!tab?.split && focusedSplit === isSplit;
     const columnFilter = columnFilters[p.id];
     const filterOpen = columnFilter !== undefined;
     const shownColumns = filterOpen
@@ -390,6 +416,165 @@ export default function WorkspaceView({ workspace }: Props) {
         ).length
       : p.result.columns.length;
     return (
+      <div className="results-pane">
+        {/* Barra de comandos del resultado (entre el editor y el grid). */}
+        <div className="results-toolbar">
+          <button
+            className={filterOpen ? "active" : undefined}
+            disabled={p.result.columns.length === 0 && !filterOpen}
+            onClick={() => setColumnFilter(p.id, filterOpen ? null : "")}
+            title={t("grid.filterColumnsTitle")}
+          >
+            {t("grid.filterColumns")}
+          </button>
+          <button
+            className={rowFilters[p.id] ? "active" : undefined}
+            disabled={p.result.columns.length === 0 && !rowFilters[p.id]}
+            onClick={() => toggleRowFilters(p.id)}
+            title={t("grid.filterRowsTitle")}
+          >
+            {t("grid.filterRows")}
+          </button>
+          {filterOpen && (
+            <>
+              <input
+                autoFocus
+                className="column-filter-input"
+                placeholder={t("grid.columnFilterPlaceholder")}
+                value={columnFilter}
+                onChange={(e) => setColumnFilter(p.id, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setColumnFilter(p.id, null);
+                  }
+                }}
+              />
+              {p.result.columns.length > 0 && (
+                <span className="dim">
+                  {t("grid.columnsShown", {
+                    n: shownColumns,
+                    total: p.result.columns.length,
+                  })}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+        {p.result.warnings.length > 0 && (
+          <div className="warning-banner">
+            <strong>{t("ws.safeWarning")}</strong> {p.result.warnings.join("; ")}
+            <button
+              className="danger"
+              onClick={() => rerun(p, true)}
+            >
+              {t("ws.runAnyway")}
+            </button>
+          </div>
+        )}
+        {p.result.error && (
+          <div className="error-banner">
+            {p.result.error}
+            {p.result.errorAt && (
+              <button
+                className="error-location"
+                disabled={p.result.errorAt.offset === null}
+                onClick={() => {
+                  const offset = p.result.errorAt?.offset;
+                  if (offset == null) return;
+                  if (!mobile) {
+                    apiFor(p).current?.goTo(offset);
+                    return;
+                  }
+                  // El editor está oculto: se muestra y luego se enfoca.
+                  setMobileView("editor");
+                  requestAnimationFrame(() => apiFor(p).current?.goTo(offset));
+                }}
+                title={p.result.errorAt.offset === null ? t("ws.errorAtStale") : undefined}
+              >
+                {t("ws.errorAt", { line: p.result.errorAt.line, col: p.result.errorAt.col })}
+              </button>
+            )}
+          </div>
+        )}
+        {exporting && p.id === pane?.id && (
+          <div className="notice-banner exporting">
+            {t("export.progress", { n: exporting.rows.toLocaleString() })}
+            <button onClick={() => void ipc.cancelQuery(exporting.id)}>
+              {t("common.cancel")}
+            </button>
+          </div>
+        )}
+        {notice && p.id === pane?.id && (
+          <div className="notice-banner" onClick={() => setNotice(null)}>
+            {notice}
+          </div>
+        )}
+        <ResultsGrid
+          wsId={wsId}
+          tab={p}
+          columnFilter={columnFilter}
+          rowFilters={rowFilters[p.id]}
+          onRowFilterChange={(col, text) => setRowFilter(p.id, col, text)}
+          onShownRowsChange={(n) => setShownRows((prev) => ({ ...prev, [p.id]: n }))}
+        />
+        <div className="results-status">
+          {p.result.running && <span>{t("common.running")}</span>}
+          {!p.result.running && p.result.columns.length > 0 && (
+            <span>
+              {shownRows[p.id] != null
+                ? t("grid.rowsShown", { n: shownRows[p.id]!, total: p.result.rows.length })
+                : t("ws.rows", { n: p.result.rows.length })}
+              {p.result.truncated && t("ws.partial")}
+            </span>
+          )}
+          {p.result.affected != null && <span>{t("ws.affected", { n: p.result.affected })}</span>}
+          {p.result.truncated && (
+            <button onClick={() => void ws.fetchMore(wsId, p.id)}>{t("ws.loadMore")}</button>
+          )}
+          {p.result.editability &&
+            !p.result.editability.editable &&
+            p.result.columns.length > 0 && (
+              <span className="dim" title={p.result.editability.reason ?? ""}>
+                {t("ws.readOnly")}
+              </span>
+            )}
+          {p.result.editability?.editable && (
+            <>
+              {p.result.editability.rowTarget != null && (
+                <button onClick={() => ws.addInsertRow(wsId, p.id)}>{t("ws.addRow")}</button>
+              )}
+              {pending > 0 && (
+                <>
+                  <span className="pending-badge">{t("ws.changes", { n: pending })}</span>
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setFocusedSplit(isSplit);
+                      void showPreview(p);
+                    }}
+                  >
+                    {t("ws.preview")}
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={() => ws.discardChanges(wsId, p.id)}
+                  >
+                    {t("ws.discard")}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /** Columna de un panel: su editor arriba y su grid de resultados abajo. */
+  const renderColumn = (p: QueryTab, isSplit: boolean) => {
+    const focused = !!split && focusedSplit === isSplit;
+    return (
       <div
         className={`query-column ${focused ? "focused" : ""}`}
         onFocusCapture={() => setFocusedSplit(isSplit)}
@@ -397,172 +582,131 @@ export default function WorkspaceView({ workspace }: Props) {
       >
         <PanelGroup direction="vertical">
           <Panel defaultSize={40} minSize={15}>
-            <div className="editor-panes">
-              <SqlEditor
-                value={p.sql}
-                engine={engine}
-                schema={schema}
-                onChange={(sql) => ws.setTabSql(wsId, p.id, sql)}
-                onRun={(selection, from) =>
-                  selection === undefined ? run(p, false, p.sql, 0) : run(p, false, selection, from)
-                }
-                apiRef={isSplit ? splitApi : editorApi}
-                errorAt={p.result.errorAt?.offset ?? null}
-              />
-            </div>
+            {renderEditor(p, isSplit)}
           </Panel>
           <PanelResizeHandle className="resize-handle horizontal" />
-          <Panel minSize={20}>
-            <div className="results-pane">
-              {/* Barra de comandos del resultado (entre el editor y el grid). */}
-              <div className="results-toolbar">
-                <button
-                  className={filterOpen ? "active" : undefined}
-                  disabled={p.result.columns.length === 0 && !filterOpen}
-                  onClick={() => setColumnFilter(p.id, filterOpen ? null : "")}
-                  title={t("grid.filterColumnsTitle")}
-                >
-                  {t("grid.filterColumns")}
-                </button>
-                <button
-                  className={rowFilters[p.id] ? "active" : undefined}
-                  disabled={p.result.columns.length === 0 && !rowFilters[p.id]}
-                  onClick={() => toggleRowFilters(p.id)}
-                  title={t("grid.filterRowsTitle")}
-                >
-                  {t("grid.filterRows")}
-                </button>
-                {filterOpen && (
-                  <>
-                    <input
-                      autoFocus
-                      className="column-filter-input"
-                      placeholder={t("grid.columnFilterPlaceholder")}
-                      value={columnFilter}
-                      onChange={(e) => setColumnFilter(p.id, e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          e.stopPropagation();
-                          setColumnFilter(p.id, null);
-                        }
-                      }}
-                    />
-                    {p.result.columns.length > 0 && (
-                      <span className="dim">
-                        {t("grid.columnsShown", {
-                          n: shownColumns,
-                          total: p.result.columns.length,
-                        })}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-              {p.result.warnings.length > 0 && (
-                <div className="warning-banner">
-                  <strong>{t("ws.safeWarning")}</strong> {p.result.warnings.join("; ")}
-                  <button
-                    className="danger"
-                    onClick={() => rerun(p, true)}
-                  >
-                    {t("ws.runAnyway")}
-                  </button>
-                </div>
-              )}
-              {p.result.error && (
-                <div className="error-banner">
-                  {p.result.error}
-                  {p.result.errorAt && (
-                    <button
-                      className="error-location"
-                      disabled={p.result.errorAt.offset === null}
-                      onClick={() => {
-                        const offset = p.result.errorAt?.offset;
-                        if (offset != null) apiFor(p).current?.goTo(offset);
-                      }}
-                      title={p.result.errorAt.offset === null ? t("ws.errorAtStale") : undefined}
-                    >
-                      {t("ws.errorAt", { line: p.result.errorAt.line, col: p.result.errorAt.col })}
-                    </button>
-                  )}
-                </div>
-              )}
-              {exporting && p.id === pane?.id && (
-                <div className="notice-banner exporting">
-                  {t("export.progress", { n: exporting.rows.toLocaleString() })}
-                  <button onClick={() => void ipc.cancelQuery(exporting.id)}>
-                    {t("common.cancel")}
-                  </button>
-                </div>
-              )}
-              {notice && p.id === pane?.id && (
-                <div className="notice-banner" onClick={() => setNotice(null)}>
-                  {notice}
-                </div>
-              )}
-              <ResultsGrid
-                wsId={wsId}
-                tab={p}
-                columnFilter={columnFilter}
-                rowFilters={rowFilters[p.id]}
-                onRowFilterChange={(col, text) => setRowFilter(p.id, col, text)}
-                onShownRowsChange={(n) => setShownRows((prev) => ({ ...prev, [p.id]: n }))}
-              />
-              <div className="results-status">
-                {p.result.running && <span>{t("common.running")}</span>}
-                {!p.result.running && p.result.columns.length > 0 && (
-                  <span>
-                    {shownRows[p.id] != null
-                      ? t("grid.rowsShown", { n: shownRows[p.id]!, total: p.result.rows.length })
-                      : t("ws.rows", { n: p.result.rows.length })}
-                    {p.result.truncated && t("ws.partial")}
-                  </span>
-                )}
-                {p.result.affected != null && <span>{t("ws.affected", { n: p.result.affected })}</span>}
-                {p.result.truncated && (
-                  <button onClick={() => void ws.fetchMore(wsId, p.id)}>{t("ws.loadMore")}</button>
-                )}
-                {p.result.editability &&
-                  !p.result.editability.editable &&
-                  p.result.columns.length > 0 && (
-                    <span className="dim" title={p.result.editability.reason ?? ""}>
-                      {t("ws.readOnly")}
-                    </span>
-                  )}
-                {p.result.editability?.editable && (
-                  <>
-                    {p.result.editability.rowTarget != null && (
-                      <button onClick={() => ws.addInsertRow(wsId, p.id)}>{t("ws.addRow")}</button>
-                    )}
-                    {pending > 0 && (
-                      <>
-                        <span className="pending-badge">{t("ws.changes", { n: pending })}</span>
-                        <button
-                          className="primary"
-                          onClick={() => {
-                            setFocusedSplit(isSplit);
-                            void showPreview(p);
-                          }}
-                        >
-                          {t("ws.preview")}
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => ws.discardChanges(wsId, p.id)}
-                        >
-                          {t("ws.discard")}
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </Panel>
+          <Panel minSize={20}>{renderResults(p, isSplit)}</Panel>
         </PanelGroup>
       </div>
     );
   };
+
+  /** Árbol del schema (panel izquierdo en desktop, vista propia en el teléfono). */
+  const schemaTree = (
+    <SchemaTree
+      schema={schema}
+      error={schemaError}
+      onBrowseTable={browseTable}
+      onRefresh={() => void ws.loadSchema(wsId, true)}
+    />
+  );
+
+  const emptyState = (
+    <div className="empty-state">
+      <button onClick={() => ws.addTab(wsId)}>{t("ws.newQuery")}</button>
+    </div>
+  );
+
+  /** Toolbar de la query: actúa sobre `pane` (el panel con foco). */
+  const renderToolbar = (pane: QueryTab) => (
+    <div className="editor-toolbar">
+      <button
+        className="primary"
+        disabled={pane.result.running}
+        onClick={() => run(pane)}
+        title={t("ws.runTitle", { current: keyRunCurrent, all: keyRunAll })}
+      >
+        {t("ws.run")}
+      </button>
+      <button
+        className={autoRuns[pane.id] ? "primary" : undefined}
+        aria-pressed={!!autoRuns[pane.id]}
+        aria-label={autoRuns[pane.id]
+          ? t("ws.autoRunStop", { seconds: autoRuns[pane.id].seconds })
+          : t("ws.autoRun")}
+        title={autoRuns[pane.id]
+          ? t("ws.autoRunStop", { seconds: autoRuns[pane.id].seconds })
+          : t("ws.autoRun")}
+        disabled={!autoRuns[pane.id] && (pane.result.running || pendingCount > 0 || !pane.sql.trim())}
+        onClick={() => {
+          if (autoRuns[pane.id]) {
+            stopAutoRun(pane.id);
+          } else {
+            const api = apiFor(pane).current;
+            const selection = api?.getSelection();
+            setAutoRunDialog({ paneId: pane.id, sql: selection || pane.sql,
+              from: selection ? api?.selectionFrom() ?? 0 : 0, seconds: "5" });
+          }
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          aria-hidden="true" style={{ display: "block" }}>
+          <path d="M20 7v5h-5M4 17v-5h5" />
+          <path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17" />
+        </svg>
+      </button>
+      {pane.result.running && (
+        <button onClick={() => {
+          stopAutoRun(pane.id);
+          void ws.cancelQuery(wsId, pane.id);
+        }}>{t("ws.cancel")}</button>
+      )}
+      {engine !== "redis" && (
+        <button
+          onClick={() => ws.setTabSql(wsId, pane.id, beautify(pane.sql, engine))}
+          title={t("ws.formatTitle", { keys: keyBeautify })}
+        >
+          {t("ws.format")}
+        </button>
+      )}
+      <FavoritesMenu
+        connId={connId}
+        database={database}
+        onOpen={(sql, title) => ws.addTab(wsId, title, sql)}
+        canSave={!!pane.sql.trim()}
+        onSaveCurrent={() => setFavName("")}
+      />
+      <HistoryMenu
+        connId={connId}
+        database={database}
+        onOpen={(sql) => ws.addTab(wsId, undefined, sql)}
+      />
+      {!mobile && (
+        <button
+          className={split ? "active" : undefined}
+          onClick={toggleSplit}
+          title={t("ws.splitTitle", { keys: keySplit })}
+        >
+          {t("ws.split")}
+        </button>
+      )}
+      {split && (
+        <span
+          className="dim pane-indicator"
+          title={t("ws.splitHint", { left: keyLeftPane, right: keyRightPane })}
+        >
+          {t("ws.activePane", {
+            side: focusedSplit ? t("ws.paneRight") : t("ws.paneLeft"),
+          })}
+        </span>
+      )}
+      <span className="spacer" />
+      {pane.result.rows.length > 0 && (
+        <>
+          {(["csv", "xlsx", "json", "sql"] as const).map((format) => (
+            <button
+              key={format}
+              disabled={exporting !== null}
+              onClick={() => openExport(format)}
+            >
+              {format.toUpperCase()}
+            </button>
+          ))}
+        </>
+      )}
+    </div>
+  );
 
   if (!config) return null;
 
@@ -619,131 +763,70 @@ export default function WorkspaceView({ workspace }: Props) {
         </div>
       </div>
 
-      <PanelGroup direction="horizontal" className="workspace-body">
-        <Panel defaultSize={20} minSize={12}>
-          <SchemaTree
-            schema={schema}
-            error={schemaError}
-            onBrowseTable={browseTable}
-            onRefresh={() => void ws.loadSchema(wsId, true)}
-          />
-        </Panel>
-        <PanelResizeHandle className="resize-handle" />
-        <Panel minSize={30}>
-          {tab && pane ? (
-            <div className="query-area">
-              <div className="editor-toolbar">
-                <button
-                  className="primary"
-                  disabled={pane.result.running}
-                  onClick={() => run(pane)}
-                  title={t("ws.runTitle", { current: keyRunCurrent, all: keyRunAll })}
-                >
-                  {t("ws.run")}
-                </button>
-                <button
-                  className={autoRuns[pane.id] ? "primary" : undefined}
-                  aria-pressed={!!autoRuns[pane.id]}
-                  aria-label={autoRuns[pane.id]
-                    ? t("ws.autoRunStop", { seconds: autoRuns[pane.id].seconds })
-                    : t("ws.autoRun")}
-                  title={autoRuns[pane.id]
-                    ? t("ws.autoRunStop", { seconds: autoRuns[pane.id].seconds })
-                    : t("ws.autoRun")}
-                  disabled={!autoRuns[pane.id] && (pane.result.running || pendingCount > 0 || !pane.sql.trim())}
-                  onClick={() => {
-                    if (autoRuns[pane.id]) {
-                      stopAutoRun(pane.id);
-                    } else {
-                      const api = apiFor(pane).current;
-                      const selection = api?.getSelection();
-                      setAutoRunDialog({ paneId: pane.id, sql: selection || pane.sql,
-                        from: selection ? api?.selectionFrom() ?? 0 : 0, seconds: "5" });
-                    }
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                    aria-hidden="true" style={{ display: "block" }}>
-                    <path d="M20 7v5h-5M4 17v-5h5" />
-                    <path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17" />
-                  </svg>
-                </button>
-                {pane.result.running && (
-                  <button onClick={() => {
-                    stopAutoRun(pane.id);
-                    void ws.cancelQuery(wsId, pane.id);
-                  }}>{t("ws.cancel")}</button>
-                )}
-                {engine !== "redis" && (
-                  <button
-                    onClick={() => ws.setTabSql(wsId, pane.id, beautify(pane.sql, engine))}
-                    title={t("ws.formatTitle", { keys: keyBeautify })}
-                  >
-                    {t("ws.format")}
-                  </button>
-                )}
-                <FavoritesMenu
-                  connId={connId}
-                  database={database}
-                  onOpen={(sql, title) => ws.addTab(wsId, title, sql)}
-                  canSave={!!pane.sql.trim()}
-                  onSaveCurrent={() => setFavName("")}
-                />
-                <HistoryMenu
-                  connId={connId}
-                  database={database}
-                  onOpen={(sql) => ws.addTab(wsId, undefined, sql)}
-                />
-                <button
-                  className={tab.split ? "active" : undefined}
-                  onClick={toggleSplit}
-                  title={t("ws.splitTitle", { keys: keySplit })}
-                >
-                  {t("ws.split")}
-                </button>
-                {tab.split && (
-                  <span
-                    className="dim pane-indicator"
-                    title={t("ws.splitHint", { left: keyLeftPane, right: keyRightPane })}
-                  >
-                    {t("ws.activePane", {
-                      side: focusedSplit ? t("ws.paneRight") : t("ws.paneLeft"),
-                    })}
-                  </span>
-                )}
-                <span className="spacer" />
-                {pane.result.rows.length > 0 && (
-                  <>
-                    {(["csv", "xlsx", "json", "sql"] as const).map((format) => (
-                      <button
-                        key={format}
-                        disabled={exporting !== null}
-                        onClick={() => openExport(format)}
-                      >
-                        {format.toUpperCase()}
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-              {tab.split ? (
-                <PanelGroup direction="horizontal" className="query-columns">
-                  <Panel minSize={20}>{renderColumn(tab, false)}</Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel minSize={20}>{renderColumn(tab.split, true)}</Panel>
-                </PanelGroup>
+      {mobile ? (
+        <>
+          <div className="mobile-views" role="tablist">
+            {MOBILE_VIEWS.map((v) => (
+              <button
+                key={v.id}
+                role="tab"
+                aria-selected={mobileView === v.id}
+                className={mobileView === v.id ? "active" : undefined}
+                onClick={() => setMobileView(v.id)}
+              >
+                {t(v.label)}
+                {v.id === "results" && pane?.result.running && " …"}
+              </button>
+            ))}
+          </div>
+          {/* Todo queda montado (historial de undo, scroll): solo se oculta. */}
+          <div className="workspace-body mobile-body">
+            <div className="mobile-view" hidden={mobileView !== "schema"}>
+              {schemaTree}
+            </div>
+            <div className="mobile-view" hidden={mobileView === "schema"}>
+              {tab && pane ? (
+                <div className="query-area">
+                  {renderToolbar(pane)}
+                  <div className="mobile-view" hidden={mobileView !== "editor"}>
+                    {renderEditor(tab, false)}
+                  </div>
+                  <div className="mobile-view" hidden={mobileView !== "results"}>
+                    {renderResults(tab, false)}
+                  </div>
+                </div>
               ) : (
-                renderColumn(tab, false)
+                emptyState
               )}
             </div>
-          ) : (
-            <div className="empty-state">
-              <button onClick={() => ws.addTab(wsId)}>{t("ws.newQuery")}</button>
-            </div>
-          )}
-        </Panel>
-      </PanelGroup>
+          </div>
+        </>
+      ) : (
+        <PanelGroup direction="horizontal" className="workspace-body">
+          <Panel defaultSize={20} minSize={12}>
+            {schemaTree}
+          </Panel>
+          <PanelResizeHandle className="resize-handle" />
+          <Panel minSize={30}>
+            {tab && pane ? (
+              <div className="query-area">
+                {renderToolbar(pane)}
+                {split ? (
+                  <PanelGroup direction="horizontal" className="query-columns">
+                    <Panel minSize={20}>{renderColumn(tab, false)}</Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel minSize={20}>{renderColumn(split, true)}</Panel>
+                  </PanelGroup>
+                ) : (
+                  renderColumn(tab, false)
+                )}
+              </div>
+            ) : (
+              emptyState
+            )}
+          </Panel>
+        </PanelGroup>
+      )}
 
       {autoRunDialog && (
         <div className="modal-backdrop" onClick={() => setAutoRunDialog(null)}>

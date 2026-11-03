@@ -16,7 +16,10 @@ uuid = { version = "1", features = ["v4"] }
 db-core = { path = "../db-core" }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-keyring = { version = "3", features = ["linux-native", "windows-native", "apple-native"] }
+# Linux: Secret Service (gnome-keyring / KWallet) persiste en disco; el
+# keyring del kernel (linux-native) se pierde al reiniciar y solo se usa para
+# migrar passwords guardados por versiones anteriores.
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "linux-native", "windows-native", "apple-native"] }
 
 [dev-dependencies]
 tempfile = "3"
