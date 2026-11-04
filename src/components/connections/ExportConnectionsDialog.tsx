@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { save } from "@tauri-apps/plugin-dialog";
+import { save } from "../../platform";
 import QRCode from "qrcode";
 import { useT } from "../../i18n";
 import { ipc, errorMessage } from "../../ipc/commands";

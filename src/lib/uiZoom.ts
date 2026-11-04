@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "../platform";
+import { currentMonitor, getCurrentWindow } from "../platform";
 import { uiZoomFor, useSettings } from "../stores/settingsStore";
 
 /**

@@ -1,0 +1,13 @@
+# Build against Debian 12 glibc so the executable also runs on Ubuntu 24.04.
+# This container is only a compiler; production runs the native systemd service.
+FROM rust:1-bookworm AS builder
+ENV CARGO_BUILD_JOBS=6
+WORKDIR /src
+COPY src-tauri ./src-tauri
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/src/src-tauri/target \
+    cargo build --locked --manifest-path src-tauri/Cargo.toml -p zanahoria-web --profile web && \
+    install -Dm755 src-tauri/target/web/zanahoria-web /out/zanahoria-web
+FROM scratch AS artifact
+COPY --from=builder /out/zanahoria-web /zanahoria-web

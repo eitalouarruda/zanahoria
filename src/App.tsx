@@ -1,6 +1,8 @@
 import { useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isWeb } from "./platform";
+import WebHeader from "./components/layout/WebHeader";
+import { listen } from "./platform";
+import { getCurrentWindow } from "./platform";
 import Sidebar from "./components/layout/Sidebar";
 import ConnectionManager from "./components/connections/ConnectionManager";
 import WorkspaceView from "./components/workspace/WorkspaceView";
@@ -66,7 +68,9 @@ export default function App() {
   ]);
 
   return (
-    <div className="app-shell">
+    <>
+    {isWeb && <WebHeader />}
+    <div className={`app-shell${isWeb ? " web-app" : ""}`}>
       <Sidebar />
       <main className="workspace">
         {active === "home" && <ConnectionManager />}
@@ -79,7 +83,8 @@ export default function App() {
         {active === "settings" && <SettingsView />}
         {workspace && <WorkspaceView key={workspace.id} workspace={workspace} />}
       </main>
-      <UpdateDialog />
+      {!isWeb && <UpdateDialog />}
     </div>
+    </>
   );
 }

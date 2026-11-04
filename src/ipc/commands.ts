@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../platform";
 import type { ExportFormat, ExportOptions } from "../lib/export";
 import type {
   BackupOptions,

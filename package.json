@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:web": "tsc --noEmit && vite build --mode web --outDir dist-web"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.0",

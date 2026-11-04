@@ -1,4 +1,4 @@
-import { save } from "@tauri-apps/plugin-dialog";
+import { save } from "../platform";
 import { ipc } from "../ipc/commands";
 import type { ResultState } from "../stores/workspaceStore";
 

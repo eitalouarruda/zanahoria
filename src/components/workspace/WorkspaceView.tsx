@@ -18,7 +18,7 @@ import { CSV_SEPARATORS } from "../../lib/csv";
 import { useShortcutLabel, useShortcuts } from "../../lib/shortcuts";
 import { useIsMobileLayout } from "../../lib/layout";
 import { useT, type MessageKey } from "../../i18n";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "../../platform";
 import {
   DEFAULT_CSV_SEPARATOR,
   exportPlan,

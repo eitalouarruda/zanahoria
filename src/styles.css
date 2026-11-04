@@ -2461,3 +2461,17 @@ html.qr-scanning #root {
 .qr-image svg path {
   shape-rendering: crispEdges;
 }
+
+/* The native app remains full-window; web adds its Quimera navigation. */
+.web-header { height: 44px; padding: 6px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); background: var(--bg-sidebar); }
+.web-header a { color: var(--fg); text-decoration: none; white-space: nowrap; }
+.web-header button { margin-left: auto; }
+.web-header .dim { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.app-shell.web-app { height: calc(100% - 44px); }
+.web-status { position: fixed; z-index: 90; top: 44px; left: 0; right: 0; background: var(--bg-panel); border: 1px solid var(--yellow); padding: 10px; }
+.web-file-dialog { z-index: 500; }
+.web-file-dialog .modal, .web-files { display: flex; flex-direction: column; gap: 12px; max-height: 85dvh; overflow: auto; width: min(92vw, 650px); }
+.web-file-dialog input { width: 100%; }
+.web-file { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding: 8px 0; }
+.web-file span { min-width: 0; overflow-wrap: anywhere; flex: 1; }
+@media(max-width:600px) { .web-header { gap: 8px; font-size: 12px; } .web-header .dim { display: none; } .web-file { align-items: flex-start; } }

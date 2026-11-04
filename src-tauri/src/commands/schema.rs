@@ -1,10 +1,11 @@
+use crate::runtime as tauri;
 use db_core::DbSchema;
 use tauri::State;
 
 use crate::error::CmdResult;
 use crate::state::AppState;
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn list_databases(state: State<'_, AppState>, conn_id: String) -> CmdResult<Vec<String>> {
     let handle = state.pools.get(&conn_id).await?;
     Ok(handle.list_databases().await?)
@@ -12,7 +13,7 @@ pub async fn list_databases(state: State<'_, AppState>, conn_id: String) -> CmdR
 
 /// Crea una database en el servidor de la conexión y devuelve la lista
 /// actualizada.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn create_database(
     state: State<'_, AppState>,
     conn_id: String,
@@ -23,7 +24,7 @@ pub async fn create_database(
     Ok(handle.list_databases().await?)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn get_schema(
     state: State<'_, AppState>,
     conn_id: String,
@@ -36,7 +37,7 @@ pub async fn get_schema(
     refresh_schema(state, conn_id, database).await
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn refresh_schema(
     state: State<'_, AppState>,
     conn_id: String,

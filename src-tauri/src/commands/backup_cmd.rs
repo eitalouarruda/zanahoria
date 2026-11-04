@@ -1,3 +1,4 @@
+use crate::runtime as tauri;
 use tauri::State;
 
 #[cfg(target_os = "android")]
@@ -6,7 +7,7 @@ use crate::error::CmdResult;
 use crate::state::AppState;
 
 /// Respaldo de SQLite (VACUUM INTO): funciona en todas las plataformas.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn sqlite_backup(
     state: State<'_, AppState>,
     conn_id: String,
@@ -18,6 +19,7 @@ pub async fn sqlite_backup(
 
 #[cfg(not(target_os = "android"))]
 mod desktop {
+    use crate::runtime as tauri;
     use std::collections::HashMap;
 
     use std::sync::atomic::Ordering;
@@ -46,7 +48,7 @@ mod desktop {
             .unwrap_or_default()
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub async fn detect_backup_tools(
         state: State<'_, AppState>,
     ) -> CmdResult<Vec<backup::ToolStatus>> {
@@ -54,7 +56,7 @@ mod desktop {
         Ok(backup::detect_tools(&ov).await)
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn set_backup_tool_path(
         state: State<'_, AppState>,
         name: String,
@@ -71,7 +73,7 @@ mod desktop {
             .set_kv("settings", "backup_tool_paths", &serde_json::json!(ov))?)
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn sniff_dump_file(path: String) -> CmdResult<backup::SniffResult> {
         backup::sniff_dump(&path).map_err(|e| CmdError {
             message: e.to_string(),
@@ -233,7 +235,7 @@ mod desktop {
 
     /// Devuelve (job_id, comando mostrable). El progreso llega por
     /// events `backup:event`.
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub async fn start_backup(
         app: tauri::AppHandle,
         state: State<'_, AppState>,
@@ -341,7 +343,7 @@ mod desktop {
 
     /// Analiza el dump y el destino sin ejecutar nada: versiones de origen y
     /// destino, estrategia, correcciones de compatibilidad, avisos y bloqueos.
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub async fn plan_restore(
         state: State<'_, AppState>,
         conn_id: String,
@@ -351,7 +353,7 @@ mod desktop {
         make_plan(&state, &conn_id, &options, &statuses).await
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub async fn start_restore(
         app: tauri::AppHandle,
         state: State<'_, AppState>,
@@ -398,7 +400,7 @@ mod desktop {
         Ok((launch_with(app, spec, Some(verify), total).await?, display))
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn cancel_job(state: State<'_, AppState>, job_id: String) -> CmdResult<()> {
         if let Some(cancel) = state.jobs.lock().unwrap().remove(&job_id) {
             cancel.cancel();
@@ -425,37 +427,37 @@ pub use desktop::*;
 mod mobile {
     use super::*;
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn detect_backup_tools() -> CmdResult<Vec<serde_json::Value>> {
         Ok(Vec::new())
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn set_backup_tool_path(_name: String, _path: String) -> CmdResult<()> {
         unsupported()
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn sniff_dump_file(_path: String) -> CmdResult<serde_json::Value> {
         unsupported()
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn start_backup(_conn_id: String) -> CmdResult<(String, String)> {
         unsupported()
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn plan_restore(_conn_id: String) -> CmdResult<serde_json::Value> {
         unsupported()
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn start_restore(_conn_id: String) -> CmdResult<(String, String)> {
         unsupported()
     }
 
-    #[tauri::command]
+    #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn cancel_job(_job_id: String) -> CmdResult<()> {
         unsupported()
     }

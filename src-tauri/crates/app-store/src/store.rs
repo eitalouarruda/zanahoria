@@ -95,9 +95,10 @@ impl AppStore {
         })
     }
 
-    #[cfg(test)]
     pub fn open_with_secrets(data_dir: &Path, secrets: Box<dyn SecretStore>) -> Result<Self> {
+        std::fs::create_dir_all(data_dir).map_err(|e| StoreError::Other(e.to_string()))?;
         let conn = Connection::open(data_dir.join("zanahoria.db"))?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),

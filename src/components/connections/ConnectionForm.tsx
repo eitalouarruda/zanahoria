@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../../platform";
 import type { ConnectionConfig, Engine } from "../../ipc/types";
 import { ipc, errorMessage } from "../../ipc/commands";
 import { useT } from "../../i18n";

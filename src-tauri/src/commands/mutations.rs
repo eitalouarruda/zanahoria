@@ -1,3 +1,4 @@
+use crate::runtime as tauri;
 use db_core::{build_mutations, Editability, MutationResult, MutationStatement, PendingChange};
 use serde::Serialize;
 use tauri::State;
@@ -13,7 +14,7 @@ pub struct MutationPreview {
 }
 
 /// Genera el SQL del Code Preview a partir de los cambios pendientes del grid.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub fn preview_mutations(
     state: State<'_, AppState>,
     conn_id: String,
@@ -30,7 +31,7 @@ pub fn preview_mutations(
 
 /// Aplica los cambios (siempre en transacción). El frontend manda los mismos
 /// pending changes que mostró en el preview.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn apply_mutations(
     state: State<'_, AppState>,
     conn_id: String,

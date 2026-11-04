@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../../platform";
 import { useT } from "../../i18n";
 import { ipc, errorMessage } from "../../ipc/commands";
 import type { ConnectionConfig } from "../../ipc/types";
