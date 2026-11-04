@@ -65,6 +65,12 @@ async fn postgres_end_to_end() {
     };
     let handle = EngineHandle::connect(&cfg, 2).await.expect("connect");
     handle.ping().await.expect("ping");
+    assert!(handle
+        .list_databases()
+        .await
+        .expect("list databases")
+        .iter()
+        .any(|name| name == "zanahoria"));
 
     // Introspección
     let schema = handle.introspect("zanahoria").await.expect("introspect");
@@ -202,6 +208,12 @@ async fn mysql_end_to_end() {
     };
     let handle = EngineHandle::connect(&cfg, 2).await.expect("connect");
     handle.ping().await.expect("ping");
+    assert!(handle
+        .list_databases()
+        .await
+        .expect("list databases")
+        .iter()
+        .any(|name| name == "zanahoria"));
 
     let schema = handle.introspect("zanahoria").await.expect("introspect");
     let customers = schema

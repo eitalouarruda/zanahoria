@@ -2,6 +2,8 @@ import type { MessageKey } from "./en";
 
 /** Português. */
 export const pt: Record<MessageKey, string> = {
+  "common.showPassword": "Ver",
+  "common.hidePassword": "Ocultar",
   "common.cancel": "Cancelar",
   "common.save": "Salvar",
   "common.close": "Fechar",

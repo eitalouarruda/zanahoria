@@ -1,3 +1,4 @@
+import PasswordInput from "./PasswordInput";
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { open } from "../../platform";
 import { useT } from "../../i18n";
@@ -251,8 +252,7 @@ export default function ImportConnectionsDialog({ onClose, onImported }: Props) 
       >
         <p className="test-ok">{t("transfer.packagesRead", { n: tokens.length })}</p>
         <p className="dim transfer-hint">{t("transfer.enterPass")}</p>
-        <input
-          type="password"
+        <PasswordInput
           autoFocus
           autoComplete="off"
           placeholder={t("transfer.passphrase")}

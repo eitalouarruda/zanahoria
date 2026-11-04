@@ -2475,3 +2475,7 @@ html.qr-scanning #root {
 .web-file { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding: 8px 0; }
 .web-file span { min-width: 0; overflow-wrap: anywhere; flex: 1; }
 @media(max-width:600px) { .web-header { gap: 8px; font-size: 12px; } .web-header .dim { display: none; } .web-file { align-items: flex-start; } }
+
+.password-field { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.password-field input { flex: 1; min-width: 0; width: 100%; }
+.password-field button { flex-shrink: 0; padding: 6px 8px; }

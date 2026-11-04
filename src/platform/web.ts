@@ -9,7 +9,7 @@ let ready: Promise<void> = Promise.resolve();
 let after = 0;
 let expired = false;
 let generation = 0;
-let reconnect: ReturnType<typeof setTimeout> | undefined;
+let reconnect: number | undefined;
 function status(message: string) { window.dispatchEvent(new CustomEvent("zanahoria:status", { detail: message })); }
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(api + path, init);
@@ -37,6 +37,7 @@ function connect(id: string) {
       for (const handler of handlers.get(event.event) ?? []) { try { handler({ payload: event.payload }); } catch (e) { console.error(e); } }
       if (event.event === "backup:event" && event.payload.kind === "done") {
         finishedJobs.set(event.payload.jobId, event.payload.success);
+        if (finishedJobs.size > 256) finishedJobs.delete(finishedJobs.keys().next().value!);
         finishDownload(event.payload.jobId);
       }
     };

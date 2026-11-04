@@ -219,6 +219,11 @@ pub fn build_backup_command(
                 "-u".into(),
                 cfg.user.clone(),
                 "--verbose".into(),
+                // MySQL 8 clients otherwise query COLUMN_STATISTICS, absent on MariaDB.
+                // `loose` keeps this compatible with MariaDB/older clients as well.
+                "--loose-column-statistics=0".into(),
+                "--no-tablespaces".into(),
+                "--single-transaction".into(),
             ];
             if opts.schema_only {
                 args.push("--no-data".into());
@@ -849,4 +854,28 @@ pub async fn run_job(spec: JobSpec) -> Result<JobHandle> {
         cancel,
         stats,
     })
+}
+
+#[cfg(test)]
+mod web_compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn mysql_dump_works_with_mariadb_without_statistics_or_tablespace_privileges() {
+        let cfg: ConnectionConfig = serde_json::from_value(serde_json::json!({
+            "id":"fixture", "name":"fixture", "engine":"mariadb",
+            "host":"localhost", "database":"fixture", "safeMode":true,
+            "password":"test-only-fixture-password"
+        }))
+        .unwrap();
+        let tools = HashMap::from([("mysqldump".into(), "/usr/bin/mysqldump".into())]);
+        let spec = build_backup_command(&cfg, &BackupOptions::default(), &tools).unwrap();
+        assert!(spec.args.contains(&"--loose-column-statistics=0".into()));
+        assert!(spec.args.contains(&"--no-tablespaces".into()));
+        assert!(spec.args.contains(&"--single-transaction".into()));
+        assert!(!spec.display.contains("test-only-fixture-password"));
+        assert!(!serde_json::to_string(&spec)
+            .unwrap()
+            .contains("test-only-fixture-password"));
+    }
 }

@@ -68,8 +68,11 @@ impl MySqlEngine {
     }
 
     pub async fn list_databases(&self) -> Result<Vec<String>> {
-        let rows = sqlx::query("SHOW DATABASES").fetch_all(&self.pool).await?;
-        Ok(rows.iter().map(|r| r.get::<String, _>(0)).collect())
+        let rows = sqlx::query("SELECT CAST(SCHEMA_NAME AS CHAR) FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME")
+            .fetch_all(&self.pool).await?;
+        rows.iter()
+            .map(|r| r.try_get::<String, _>(0).map_err(Into::into))
+            .collect()
     }
 
     pub async fn server_version(&self) -> Result<String> {

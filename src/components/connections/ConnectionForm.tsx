@@ -1,3 +1,4 @@
+import PasswordInput from "./PasswordInput";
 import { useState } from "react";
 import { open } from "../../platform";
 import type { ConnectionConfig, Engine } from "../../ipc/types";
@@ -170,8 +171,7 @@ export default function ConnectionForm({
             </label>
             <label>
               {t("form.password")}
-              <input
-                type="password"
+              <PasswordInput
                 value={noPassword ? "" : (config.password ?? "")}
                 onChange={(e) => set("password", e.target.value)}
                 placeholder={initial && hasPassword ? t("form.passwordUnchanged") : ""}

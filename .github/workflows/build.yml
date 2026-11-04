@@ -52,6 +52,31 @@ jobs:
             exit 1
           fi
 
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build:web
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml -p zanahoria-web
+      - run: cargo build --locked --manifest-path src-tauri/Cargo.toml -p zanahoria-web --profile web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zanahoria-web-linux
+          path: |
+            dist-web
+            src-tauri/target/web/zanahoria-web
+
   # Cada push a main publica una release. La versión es MAJOR.MINOR de
   # tauri.conf.json + el número de ejecución: 0.1.57, 0.1.58, ...
   release:

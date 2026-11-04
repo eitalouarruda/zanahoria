@@ -1,3 +1,4 @@
+import PasswordInput from "./PasswordInput";
 import { useEffect, useMemo, useState } from "react";
 import { save } from "../../platform";
 import QRCode from "qrcode";
@@ -122,16 +123,14 @@ export default function ExportConnectionsDialog({ connections, initial, onClose 
           ))}
         </div>
         <p className="dim transfer-hint">{t("transfer.passHint")}</p>
-        <input
-          type="password"
+        <PasswordInput
           autoFocus
           autoComplete="new-password"
           placeholder={t("transfer.passphrase")}
           value={pass}
           onChange={(e) => setPass(e.target.value)}
         />
-        <input
-          type="password"
+        <PasswordInput
           autoComplete="new-password"
           placeholder={t("transfer.passConfirm")}
           value={confirm}

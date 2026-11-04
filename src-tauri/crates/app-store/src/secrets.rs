@@ -316,6 +316,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn concurrent_file_secrets_preserve_every_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = std::sync::Arc::new(FileCipherStore::new(dir.path()));
+        std::thread::scope(|scope| {
+            for id in 0..12 {
+                let store = store.clone();
+                scope.spawn(move || {
+                    store
+                        .set(&format!("conn-{id}"), &format!("test-only-secret-{id}"))
+                        .unwrap()
+                });
+            }
+        });
+        for id in 0..12 {
+            assert_eq!(
+                store.get(&format!("conn-{id}")).unwrap().unwrap(),
+                format!("test-only-secret-{id}")
+            );
+        }
+    }
+
+    #[test]
     fn file_cipher_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let store = FileCipherStore::new(dir.path());

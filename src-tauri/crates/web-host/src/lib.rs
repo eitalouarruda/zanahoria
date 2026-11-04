@@ -270,10 +270,6 @@ async fn upload(
             "Allocate a new file before uploading",
         ));
     }
-    let mut guard = UploadGuard {
-        path: path.clone(),
-        finished: false,
-    };
     let m = std::fs::metadata(&path).map_err(|e| failure(StatusCode::NOT_FOUND, e))?;
     if m.len() != 0 {
         return Err(failure(
@@ -281,6 +277,10 @@ async fn upload(
             "Uploads cannot replace an existing file",
         ));
     }
+    let mut guard = UploadGuard {
+        path: path.clone(),
+        finished: false,
+    };
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)
         .open(&path)
@@ -481,4 +481,233 @@ pub async fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
         })
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::{Emitter, Manager};
+    fn server(root: &Path) -> Shared {
+        std::fs::create_dir_all(root.join("files")).unwrap();
+        let store = app_store::AppStore::open_with_secrets(
+            root,
+            Box::new(app_store::FileCipherStore::new(root)),
+        )
+        .unwrap();
+        Arc::new(Server {
+            store: Arc::new(store),
+            files: root.join("files"),
+            clients: Mutex::new(HashMap::new()),
+            gate: Mutex::new(Gate {
+                maintenance: false,
+                active: 0,
+            }),
+            uploads: Mutex::new(HashSet::new()),
+        })
+    }
+    #[tokio::test]
+    async fn uploaded_and_exported_files_cannot_be_replaced_or_deleted_on_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = server(dir.path());
+        let id = new_client(State(s.clone())).await.unwrap().0["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let file = allocate(
+            State(s.clone()),
+            RoutePath(id.clone()),
+            Json(FileRequest {
+                name: "export.csv".into(),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        let name = file["name"].as_str().unwrap().to_string();
+        let path = PathBuf::from(file["path"].as_str().unwrap());
+        std::fs::write(&path, b"finished export").unwrap();
+        let req = Request::builder()
+            .body(axum::body::Body::from("replacement"))
+            .unwrap();
+        assert_eq!(
+            upload(State(s.clone()), RoutePath((id.clone(), name)), req)
+                .await
+                .unwrap_err()
+                .0,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"finished export");
+        let file = allocate(
+            State(s.clone()),
+            RoutePath(id.clone()),
+            Json(FileRequest {
+                name: "upload.txt".into(),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        let name = file["name"].as_str().unwrap().to_string();
+        let path = PathBuf::from(file["path"].as_str().unwrap());
+        let _ = upload(
+            State(s.clone()),
+            RoutePath((id.clone(), name.clone())),
+            Request::builder()
+                .body(axum::body::Body::from("original"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            upload(
+                State(s.clone()),
+                RoutePath((id, name)),
+                Request::builder()
+                    .body(axum::body::Body::from("replacement"))
+                    .unwrap()
+            )
+            .await
+            .unwrap_err()
+            .0,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(std::fs::read(path).unwrap(), b"original");
+    }
+    #[tokio::test]
+    async fn clients_isolate_events_and_backup_gate_preserves_active_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = server(dir.path());
+        let a = new_client(State(s.clone())).await.unwrap().0["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let b = new_client(State(s.clone())).await.unwrap().0["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let c = client(&s, &a).unwrap();
+        c.app.emit("query:event", json!({"queryId":"one"})).unwrap();
+        assert_eq!(c.app.events_after(0).0.len(), 1);
+        assert!(client(&s, &b).unwrap().app.events_after(0).0.is_empty());
+        assert!(client(&s, "unknown").is_err());
+        let lease = enter(&s).unwrap();
+        assert_eq!(
+            quiesce(State(s.clone())).await.unwrap_err().0,
+            StatusCode::CONFLICT
+        );
+        drop(lease);
+        let state = c.app.state::<state::AppState>();
+        state.queries.lock().unwrap().insert(
+            "busy".into(),
+            state::RunningQuery {
+                cancel: tokio_util::sync::CancellationToken::new(),
+                resume: Arc::new(tokio::sync::Notify::new()),
+            },
+        );
+        assert_eq!(
+            quiesce(State(s.clone())).await.unwrap_err().0,
+            StatusCode::CONFLICT
+        );
+        state.queries.lock().unwrap().clear();
+        let _ = quiesce(State(s.clone())).await.unwrap();
+        assert!(enter(&s).is_err());
+        let _ = resume(State(s.clone())).await;
+        assert!(enter(&s).is_ok());
+    }
+    async fn query(app: &AppHandle, conn: &str, sql: &str) -> Value {
+        let id = uuid::Uuid::new_v4().to_string();
+        let result = rpc::dispatch(
+            app,
+            "run_query",
+            json!({"queryId":id,"connId":conn,"database":"","sql":sql,"confirmDangerous":true}),
+        )
+        .await
+        .unwrap();
+        for _ in 0..200 {
+            if app
+                .events_after(0)
+                .0
+                .iter()
+                .any(|e| e.payload["queryId"] == id && e.payload["event"]["kind"] == "done")
+            {
+                return result;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("query did not finish")
+    }
+    #[tokio::test]
+    async fn sqlite_commands_mutations_exports_and_private_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = server(dir.path());
+        let app = AppHandle::new(s.store.clone(), s.files.clone());
+        let conn = uuid::Uuid::new_v4().to_string();
+        let db = s
+            .files
+            .join(format!("{}-data.sqlite", uuid::Uuid::new_v4()));
+        std::fs::write(&db, []).unwrap();
+        let config =
+            json!({"id":conn,"name":"fixture","engine":"sqlite","database":db,"safeMode":true});
+        rpc::dispatch(&app, "save_connection", json!({"config":config}))
+            .await
+            .unwrap();
+        rpc::dispatch(&app, "connect", json!({"connId":conn}))
+            .await
+            .unwrap();
+        query(
+            &app,
+            &conn,
+            "CREATE TABLE people(id INTEGER PRIMARY KEY,name TEXT)",
+        )
+        .await;
+        query(&app, &conn, "INSERT INTO people VALUES(1,'Before')").await;
+        rpc::dispatch(&app, "get_schema", json!({"connId":conn,"database":""}))
+            .await
+            .unwrap();
+        let result = query(&app, &conn, "SELECT * FROM people").await;
+        assert!(result["editability"]["editable"].as_bool().unwrap());
+        // DbValue's serialized representation is supplied below by its real serde implementation.
+        let change = db_core::PendingChange {
+            kind: db_core::ChangeKind::Update,
+            target: 0,
+            pk: HashMap::from([("id".into(), db_core::DbValue::Int(1))]),
+            values: HashMap::from([("name".into(), db_core::DbValue::Text("After".into()))]),
+            old_values: HashMap::from([("name".into(), db_core::DbValue::Text("Before".into()))]),
+        };
+        let args = json!({"connId":conn,"database":"","editability":result["editability"],"changes":[change]});
+        let preview = rpc::dispatch(&app, "preview_mutations", args.clone())
+            .await
+            .unwrap();
+        assert!(!preview["statements"].as_array().unwrap().is_empty());
+        let mutated = rpc::dispatch(&app, "apply_mutations", args).await.unwrap();
+        assert_eq!(mutated["affectedTotal"], 1);
+        for format in ["csv", "json", "sql", "xlsx"] {
+            let path = s
+                .files
+                .join(format!("{}-result.{format}", uuid::Uuid::new_v4()));
+            let result=rpc::dispatch(&app,"export_query",json!({"exportId":uuid::Uuid::new_v4(),"connId":conn,"database":"","sql":"SELECT * FROM people","format":format,"path":path})).await.unwrap();
+            assert_eq!(result["rows"], 1);
+            assert!(std::fs::metadata(path).unwrap().len() > 0);
+        }
+        let path = s
+            .files
+            .join(format!("{}-backup.sqlite", uuid::Uuid::new_v4()));
+        rpc::dispatch(&app, "sqlite_backup", json!({"connId":conn,"dest":path}))
+            .await
+            .unwrap();
+        assert!(std::fs::metadata(path).unwrap().len() > 0);
+        assert!(
+            rpc::dispatch(&app, "read_text_file", json!({"path":"/etc/passwd"}))
+                .await
+                .is_err()
+        );
+        assert!(rpc::dispatch(&app,"save_connection",json!({"config":{"id":uuid::Uuid::new_v4(),"name":"bad","engine":"sqlite","database":"/etc/quimera/quimera.sqlite","safeMode":true}})).await.is_err());
+        assert!(rpc::dispatch(
+            &app,
+            "kv_set",
+            json!({"table":"settings","key":"backup_tool_paths","value":{"pg_dump":"/bin/sh"}})
+        )
+        .await
+        .is_err());
+    }
 }
