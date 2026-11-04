@@ -3,6 +3,10 @@ name = "app-store"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["desktop-keyring"]
+desktop-keyring = ["dep:keyring"]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -21,7 +25,7 @@ db-core = { path = "../db-core" }
 # Linux: Secret Service (gnome-keyring / KWallet) persiste en disco; el
 # keyring del kernel (linux-native) se pierde al reiniciar y solo se usa para
 # migrar passwords guardados por versiones anteriores.
-keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "linux-native", "windows-native", "apple-native"] }
+keyring = { version = "3", optional = true, features = ["sync-secret-service", "crypto-rust", "linux-native", "windows-native", "apple-native"] }
 
 [dev-dependencies]
 tempfile = "3"

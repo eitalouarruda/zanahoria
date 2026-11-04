@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "../../platform";
 import { ipc, errorMessage } from "../../ipc/commands";
 import { useT, type MessageKey } from "../../i18n";
 import { en } from "../../i18n/en";

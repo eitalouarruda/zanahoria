@@ -1,0 +1,69 @@
+# Disposable fixtures only; never use these credentials for personal databases.
+services:
+  postgres:
+    mem_limit: 256m
+    cpus: 1
+    image: postgres:16
+    ports:
+      - "127.0.0.1:55432:5432"
+    environment:
+      POSTGRES_USER: zanahoria
+      POSTGRES_PASSWORD: zanahoria
+      POSTGRES_DB: zanahoria
+    volumes:
+      - ../docker/seed/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zanahoria"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  mysql:
+    mem_limit: 768m
+    cpus: 1
+    image: mysql:8.4
+    ports:
+      - "127.0.0.1:33306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: zanahoria
+      MYSQL_USER: zanahoria
+      MYSQL_PASSWORD: zanahoria
+      MYSQL_DATABASE: zanahoria
+    volumes:
+      - ../docker/seed/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pzanahoria"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mariadb:
+    mem_limit: 512m
+    cpus: 1
+    image: mariadb:11
+    ports:
+      - "127.0.0.1:33307:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: zanahoria
+      MARIADB_USER: zanahoria
+      MARIADB_PASSWORD: zanahoria
+      MARIADB_DATABASE: zanahoria
+    volumes:
+      - ../docker/seed/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    mem_limit: 128m
+    cpus: 0.5
+    image: redis:7
+    ports:
+      - "127.0.0.1:63790:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

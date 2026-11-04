@@ -20,6 +20,7 @@ pub trait SecretStore: Send + Sync {
 /// aparte dentro del data dir (en Android el sandbox de la app lo aísla;
 /// fase 2: mover la clave al Android Keystore).
 pub struct FileCipherStore {
+    lock: std::sync::Mutex<()>,
     key_path: PathBuf,
     secrets_path: PathBuf,
 }
@@ -27,6 +28,7 @@ pub struct FileCipherStore {
 impl FileCipherStore {
     pub fn new(data_dir: &Path) -> Self {
         Self {
+            lock: std::sync::Mutex::new(()),
             key_path: data_dir.join("secrets.key"),
             secrets_path: data_dir.join("secrets.json"),
         }
@@ -76,6 +78,10 @@ impl FileCipherStore {
 
 impl SecretStore for FileCipherStore {
     fn set(&self, conn_id: &str, secret: &str) -> Result<()> {
+        let _lock = self
+            .lock
+            .lock()
+            .map_err(|_| StoreError::Secret("secret store lock poisoned".into()))?;
         let cipher = self.key()?;
         let mut nonce_bytes = [0u8; 12];
         rand::thread_rng().fill_bytes(&mut nonce_bytes);
@@ -95,6 +101,10 @@ impl SecretStore for FileCipherStore {
     }
 
     fn get(&self, conn_id: &str) -> Result<Option<String>> {
+        let _lock = self
+            .lock
+            .lock()
+            .map_err(|_| StoreError::Secret("secret store lock poisoned".into()))?;
         let map = self.read_all()?;
         let Some(entry) = map.get(conn_id) else {
             return Ok(None);
@@ -115,13 +125,17 @@ impl SecretStore for FileCipherStore {
     }
 
     fn delete(&self, conn_id: &str) -> Result<()> {
+        let _lock = self
+            .lock
+            .lock()
+            .map_err(|_| StoreError::Secret("secret store lock poisoned".into()))?;
         let mut map = self.read_all()?;
         map.remove(conn_id);
         self.write_all(&map)
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), feature = "desktop-keyring"))]
 mod keyring_store {
     use super::*;
     use keyring::Entry;
@@ -204,7 +218,7 @@ mod keyring_store {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, target_os = "linux", feature = "desktop-keyring"))]
 mod keyring_tests {
     use super::*;
     use keyring::Entry;
@@ -239,7 +253,7 @@ mod keyring_tests {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), feature = "desktop-keyring"))]
 pub use keyring_store::KeyringStore;
 
 /// Keyring del sistema con el archivo cifrado como respaldo. Se lee de los
@@ -290,7 +304,7 @@ impl SecretStore for FallbackStore {
 pub fn default_secret_store(data_dir: &Path) -> Box<dyn SecretStore> {
     #[allow(unused_mut)]
     let mut primary: Option<Box<dyn SecretStore>> = None;
-    #[cfg(not(target_os = "android"))]
+    #[cfg(all(not(target_os = "android"), feature = "desktop-keyring"))]
     if KeyringStore.get("__zanahoria_probe__").is_ok() {
         primary = Some(Box::new(KeyringStore));
     }
@@ -300,6 +314,28 @@ pub fn default_secret_store(data_dir: &Path) -> Box<dyn SecretStore> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_file_secrets_preserve_every_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = std::sync::Arc::new(FileCipherStore::new(dir.path()));
+        std::thread::scope(|scope| {
+            for id in 0..12 {
+                let store = store.clone();
+                scope.spawn(move || {
+                    store
+                        .set(&format!("conn-{id}"), &format!("test-only-secret-{id}"))
+                        .unwrap()
+                });
+            }
+        });
+        for id in 0..12 {
+            assert_eq!(
+                store.get(&format!("conn-{id}")).unwrap().unwrap(),
+                format!("test-only-secret-{id}")
+            );
+        }
+    }
 
     #[test]
     fn file_cipher_roundtrip() {

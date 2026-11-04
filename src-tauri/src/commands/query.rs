@@ -1,3 +1,4 @@
+use crate::runtime as tauri;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -43,7 +44,7 @@ enum QueryEventBody {
     },
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 #[allow(clippy::too_many_arguments)]
 pub async fn run_query(
     app: tauri::AppHandle,
@@ -165,7 +166,7 @@ fn spawn_forwarder(
     });
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub fn fetch_more(state: State<'_, AppState>, query_id: String) -> CmdResult<()> {
     if let Some(q) = state.queries.lock().unwrap().get(&query_id) {
         q.resume.notify_one();
@@ -173,7 +174,7 @@ pub fn fetch_more(state: State<'_, AppState>, query_id: String) -> CmdResult<()>
     Ok(())
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub fn cancel_query(state: State<'_, AppState>, query_id: String) -> CmdResult<()> {
     if let Some(q) = state.queries.lock().unwrap().remove(&query_id) {
         q.cancel.cancel();

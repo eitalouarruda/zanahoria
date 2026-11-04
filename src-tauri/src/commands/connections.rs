@@ -1,3 +1,4 @@
+use crate::runtime as tauri;
 use db_core::{Capabilities, ConnectionConfig, EngineHandle};
 use serde::Serialize;
 use tauri::State;
@@ -13,19 +14,19 @@ pub struct ConnInfo {
     pub databases: Vec<String>,
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub fn list_saved_connections(
     state: State<'_, AppState>,
 ) -> CmdResult<Vec<app_store::SavedConnection>> {
     Ok(state.store.list_connections()?)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub fn save_connection(state: State<'_, AppState>, config: ConnectionConfig) -> CmdResult<()> {
     Ok(state.store.save_connection(config)?)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn delete_connection(state: State<'_, AppState>, conn_id: String) -> CmdResult<()> {
     state.pools.disconnect(&conn_id).await?;
     Ok(state.store.delete_connection(&conn_id)?)
@@ -35,7 +36,7 @@ pub async fn delete_connection(state: State<'_, AppState>, conn_id: String) -> C
 /// conexión existente el formulario no recibe la password guardada: sin
 /// password (`None`) se usa la del keyring, igual que hace `save_connection`;
 /// vacía es "sin password".
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn test_connection(
     state: State<'_, AppState>,
     mut config: ConnectionConfig,
@@ -53,7 +54,7 @@ pub async fn test_connection(
 
 /// `database` opcional: reconecta el pool a otra database de la misma
 /// conexión (Postgres tiene pools por database).
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn connect(
     state: State<'_, AppState>,
     conn_id: String,
@@ -73,7 +74,7 @@ pub async fn connect(
     })
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn disconnect(state: State<'_, AppState>, conn_id: String) -> CmdResult<()> {
     state.pools.disconnect(&conn_id).await?;
     state
@@ -86,7 +87,7 @@ pub async fn disconnect(state: State<'_, AppState>, conn_id: String) -> CmdResul
 
 /// Paquete cifrado (`ZNH1.…`) con las conexiones elegidas y sus passwords.
 /// Argon2 tarda: corre fuera del hilo de la UI.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn export_connections(
     state: State<'_, AppState>,
     ids: Vec<String>,
@@ -101,7 +102,7 @@ pub async fn export_connections(
 
 /// Descifra un paquete exportado; el frontend muestra el resultado antes de
 /// guardar nada.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn decrypt_connections(
     token: String,
     passphrase: String,

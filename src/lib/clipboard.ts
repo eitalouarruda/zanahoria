@@ -1,4 +1,4 @@
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeText } from "../platform";
 
 /**
  * Copia texto al portapapeles del sistema. Usa el plugin nativo: en Android

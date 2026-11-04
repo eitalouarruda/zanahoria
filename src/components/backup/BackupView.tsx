@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { listen } from "../../platform";
+import { open, save } from "../../platform";
 import { ipc, errorMessage } from "../../ipc/commands";
 import { useConnections } from "../../stores/connectionsStore";
 import { useWorkspaces } from "../../stores/workspaceStore";

@@ -12,7 +12,7 @@ pub struct RunningQuery {
 
 pub struct AppState {
     pub pools: PoolManager,
-    pub store: app_store::AppStore,
+    pub store: Arc<app_store::AppStore>,
     pub queries: Mutex<HashMap<String, RunningQuery>>,
     /// Cache de schema por "conn_id/database" para autocomplete y editabilidad.
     pub schemas: Mutex<HashMap<String, DbSchema>>,
@@ -21,7 +21,12 @@ pub struct AppState {
 }
 
 impl AppState {
+    #[cfg(feature = "desktop")]
     pub fn new(store: app_store::AppStore) -> Self {
+        Self::with_store(Arc::new(store))
+    }
+
+    pub fn with_store(store: Arc<app_store::AppStore>) -> Self {
         let max_conns = if cfg!(target_os = "android") { 2 } else { 5 };
         Self {
             pools: PoolManager::new(max_conns),

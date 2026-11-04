@@ -6,13 +6,17 @@ authors = ["eitalouarruda"]
 edition = "2021"
 
 [workspace]
-members = ["crates/db-core", "crates/app-store", "crates/backup"]
+members = ["crates/db-core", "crates/app-store", "crates/backup", "crates/web-host"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+[features]
+default = ["desktop"]
+desktop = []
 
 [lib]
 name = "zanahoria_lib"
@@ -50,3 +54,8 @@ strip = true
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = "2"
 tauri-plugin-opener = "2"
+
+[profile.web]
+inherits = "release"
+lto = "thin"
+codegen-units = 8

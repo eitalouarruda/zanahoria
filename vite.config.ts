@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 
 const host = process.env.TAURI_DEV_HOST;
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === "web" ? "/tools/zanahoria/" : "/",
   plugins: [react()],
   clearScreen: false,
   server: {
@@ -21,4 +22,4 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
   },
-});
+}));

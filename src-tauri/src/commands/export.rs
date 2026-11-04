@@ -6,6 +6,7 @@
 //! `export_rows` escribe filas ya cargadas (consultas que no se pueden
 //! re-ejecutar sin efectos, cuyo resultado ya está completo).
 
+use crate::runtime as tauri;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
@@ -68,7 +69,7 @@ struct ExportProgress {
 
 /// Re-ejecuta `sql` (solo si es de lectura) y exporta TODAS sus filas a `path`.
 /// Se cancela con `cancel_query(export_id)`; el archivo parcial se borra.
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 #[allow(clippy::too_many_arguments)]
 pub async fn export_query(
     app: tauri::AppHandle,
@@ -180,7 +181,7 @@ fn write_stream(
 }
 
 /// Exporta filas ya cargadas en el frontend (resultado completo).
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn export_rows(
     app: tauri::AppHandle,
     path: String,

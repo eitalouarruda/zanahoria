@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
+import { getVersion } from "../../platform";
 import { LANGUAGES, useT, type MessageKey } from "../../i18n";
 import {
   ACTIONS,

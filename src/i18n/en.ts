@@ -1,6 +1,8 @@
 /** English (default). Source of truth for message keys. */
 export const en = {
   // Common
+  "common.showPassword": "Show",
+  "common.hidePassword": "Hide",
   "common.cancel": "Cancel",
   "common.save": "Save",
   "common.close": "Close",

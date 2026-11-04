@@ -1,0 +1,22 @@
+[package]
+name = "zanahoria-web"
+version = "0.1.0"
+edition = "2021"
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("desktop"))'] }
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "fs", "io-util", "signal"] }
+tokio-util = "0.7"
+axum = { version = "0.8", features = ["ws", "multipart"] }
+futures = "0.3"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+rust_xlsxwriter = { version = "0.100.0", features = ["chrono", "constant_memory"] }
+db-core = { path = "../db-core" }
+app-store = { path = "../app-store", default-features = false }
+backup = { path = "../backup" }
+[dev-dependencies]
+tempfile = "3"
