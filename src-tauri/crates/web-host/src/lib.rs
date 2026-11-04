@@ -29,17 +29,26 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::io::AsyncWriteExt;
+use tokio::{
+    io::{AsyncSeekExt, AsyncWriteExt},
+    sync::Mutex as AsyncMutex,
+};
 struct Client {
     app: AppHandle,
     seen: AtomicU64,
 }
+type ChunkUploads = Mutex<HashMap<(String, String), Arc<AsyncMutex<ChunkUpload>>>>;
 struct Server {
     store: Arc<app_store::AppStore>,
     files: PathBuf,
     clients: Mutex<HashMap<String, Arc<Client>>>,
     gate: Mutex<Gate>,
     uploads: Mutex<HashSet<(String, String)>>,
+    chunk_uploads: ChunkUploads,
+}
+struct ChunkUpload {
+    size: u64,
+    offset: u64,
 }
 struct Gate {
     maintenance: bool,
@@ -177,6 +186,8 @@ async fn stream(ws: WebSocket, c: Arc<Client>, mut after: u64) {
 #[derive(Deserialize)]
 struct FileRequest {
     name: String,
+    #[serde(default)]
+    size: Option<u64>,
 }
 fn safe_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or("file");
@@ -211,7 +222,21 @@ async fn allocate(
         .create_new(true)
         .open(&path)
         .map_err(|e| failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
-    s.uploads.lock().unwrap().insert((id, name.clone()));
+    if let Some(size) = req.size {
+        if size == 0 || size > 1024 * 1024 * 1024 {
+            let _ = std::fs::remove_file(&path);
+            return Err(failure(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "Upload must be between 1 byte and 1 GiB",
+            ));
+        }
+        s.chunk_uploads.lock().unwrap().insert(
+            (id, name.clone()),
+            Arc::new(AsyncMutex::new(ChunkUpload { size, offset: 0 })),
+        );
+    } else {
+        s.uploads.lock().unwrap().insert((id, name.clone()));
+    }
     Ok(Json(json!({"path":path,"name":name})))
 }
 fn file_path(s: &Shared, name: &str) -> Result<PathBuf> {
@@ -309,6 +334,93 @@ async fn upload(
     guard.finished = true;
     Ok(Json(json!({"path":path,"size":size})))
 }
+const MAX_UPLOAD_CHUNK: usize = 8 * 1024 * 1024;
+fn content_range(value: &str) -> Option<(u64, u64, u64)> {
+    let value = value.strip_prefix("bytes ")?;
+    let (range, total) = value.split_once('/')?;
+    let (start, end) = range.split_once('-')?;
+    Some((start.parse().ok()?, end.parse().ok()?, total.parse().ok()?))
+}
+async fn upload_chunk(
+    State(s): State<Shared>,
+    RoutePath((id, name)): RoutePath<(String, String)>,
+    request: Request,
+) -> Result<Json<Value>> {
+    let _lease = enter(&s)?;
+    client(&s, &id)?;
+    let key = (id, name.clone());
+    let progress = s
+        .chunk_uploads
+        .lock()
+        .unwrap()
+        .get(&key)
+        .cloned()
+        .ok_or_else(|| failure(StatusCode::CONFLICT, "Allocate a new file before uploading"))?;
+    let value = request
+        .headers()
+        .get(header::CONTENT_RANGE)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| failure(StatusCode::BAD_REQUEST, "Content-Range is required"))?;
+    let (start, end, total) = content_range(value)
+        .ok_or_else(|| failure(StatusCode::BAD_REQUEST, "Invalid Content-Range"))?;
+    if start > end || total == 0 || end >= total || end - start + 1 > MAX_UPLOAD_CHUNK as u64 {
+        return Err(failure(
+            StatusCode::BAD_REQUEST,
+            "Invalid upload chunk range",
+        ));
+    }
+    let mut progress = progress.lock().await;
+    if total != progress.size || start != progress.offset {
+        return Err(failure(
+            StatusCode::CONFLICT,
+            format!("Expected next byte {}, got {}", progress.offset, start),
+        ));
+    }
+    let expected = (end - start + 1) as usize;
+    let mut body = request.into_body().into_data_stream();
+    let mut bytes = Vec::with_capacity(expected);
+    while let Some(part) = body.next().await {
+        let part = part.map_err(|e| failure(StatusCode::BAD_REQUEST, e))?;
+        if bytes.len() + part.len() > MAX_UPLOAD_CHUNK {
+            return Err(failure(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "Upload chunk exceeds 8 MiB",
+            ));
+        }
+        bytes.extend_from_slice(&part);
+    }
+    if bytes.len() != expected {
+        return Err(failure(
+            StatusCode::BAD_REQUEST,
+            "Upload chunk size does not match Content-Range",
+        ));
+    }
+    let path = file_path(&s, &name)?;
+    let mut file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .await
+        .map_err(|e| failure(StatusCode::BAD_REQUEST, e))?;
+    file.seek(std::io::SeekFrom::Start(start))
+        .await
+        .map_err(|e| failure(StatusCode::INSUFFICIENT_STORAGE, e))?;
+    file.write_all(&bytes)
+        .await
+        .map_err(|e| failure(StatusCode::INSUFFICIENT_STORAGE, e))?;
+    file.sync_data()
+        .await
+        .map_err(|e| failure(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    progress.offset = end + 1;
+    let received = progress.offset;
+    let complete = received == progress.size;
+    let size = progress.size;
+    if complete {
+        s.chunk_uploads.lock().unwrap().remove(&key);
+    }
+    Ok(Json(
+        json!({"path":path,"received":received,"size":size,"complete":complete}),
+    ))
+}
 struct DownloadStream {
     reader: tokio_util::io::ReaderStream<tokio::fs::File>,
     temporary: Option<PathBuf>,
@@ -396,6 +508,12 @@ async fn delete_file(
 ) -> Result<Json<Value>> {
     let _lease = enter(&s)?;
     client(&s, &id)?;
+    let key = (id, name.clone());
+    s.uploads.lock().unwrap().remove(&key);
+    let pending = s.chunk_uploads.lock().unwrap().remove(&key);
+    if let Some(pending) = pending {
+        let _progress = pending.lock().await;
+    }
     let path = file_path(&s, &name)?;
     if s.clients.lock().unwrap().values().any(|c| c.app.busy()) {
         return Err(failure(
@@ -444,6 +562,7 @@ pub async fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
             active: 0,
         }),
         uploads: Mutex::new(HashSet::new()),
+        chunk_uploads: Mutex::new(HashMap::new()),
     });
     let shutdown = shared.clone();
     let router = Router::new()
@@ -456,7 +575,10 @@ pub async fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .route("/client/{id}/files", get(files).post(allocate))
         .route(
             "/client/{id}/files/{name}",
-            get(download).put(upload).delete(delete_file),
+            get(download)
+                .put(upload)
+                .patch(upload_chunk)
+                .delete(delete_file),
         )
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .with_state(shared);
@@ -503,6 +625,7 @@ mod tests {
                 active: 0,
             }),
             uploads: Mutex::new(HashSet::new()),
+            chunk_uploads: Mutex::new(HashMap::new()),
         })
     }
     #[tokio::test]
@@ -518,6 +641,7 @@ mod tests {
             RoutePath(id.clone()),
             Json(FileRequest {
                 name: "export.csv".into(),
+                size: None,
             }),
         )
         .await
@@ -542,6 +666,7 @@ mod tests {
             RoutePath(id.clone()),
             Json(FileRequest {
                 name: "upload.txt".into(),
+                size: None,
             }),
         )
         .await
@@ -572,6 +697,75 @@ mod tests {
             StatusCode::CONFLICT
         );
         assert_eq!(std::fs::read(path).unwrap(), b"original");
+    }
+    #[tokio::test]
+    async fn large_upload_chunks_are_ordered_and_assembled_before_becoming_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = server(dir.path());
+        let id = new_client(State(s.clone())).await.unwrap().0["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let file = allocate(
+            State(s.clone()),
+            RoutePath(id.clone()),
+            Json(FileRequest {
+                name: "backup.dump".into(),
+                size: Some(11),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        let name = file["name"].as_str().unwrap().to_string();
+        let path = PathBuf::from(file["path"].as_str().unwrap());
+
+        let first = Request::builder()
+            .header(header::CONTENT_RANGE, "bytes 0-4/11")
+            .body(axum::body::Body::from("Hello"))
+            .unwrap();
+        let result = upload_chunk(
+            State(s.clone()),
+            RoutePath((id.clone(), name.clone())),
+            first,
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(result["received"], 5);
+        assert_eq!(result["complete"], false);
+
+        let skipped = Request::builder()
+            .header(header::CONTENT_RANGE, "bytes 6-10/11")
+            .body(axum::body::Body::from("World"))
+            .unwrap();
+        assert_eq!(
+            upload_chunk(
+                State(s.clone()),
+                RoutePath((id.clone(), name.clone())),
+                skipped
+            )
+            .await
+            .unwrap_err()
+            .0,
+            StatusCode::CONFLICT
+        );
+
+        let last = Request::builder()
+            .header(header::CONTENT_RANGE, "bytes 5-10/11")
+            .body(axum::body::Body::from(" World"))
+            .unwrap();
+        let result = upload_chunk(
+            State(s.clone()),
+            RoutePath((id.clone(), name.clone())),
+            last,
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(result["complete"], true);
+        assert_eq!(std::fs::read(&path).unwrap(), b"Hello World");
+        assert!(!s.chunk_uploads.lock().unwrap().contains_key(&(id, name)));
     }
     #[tokio::test]
     async fn clients_isolate_events_and_backup_gate_preserves_active_work() {

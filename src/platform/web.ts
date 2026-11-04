@@ -87,13 +87,30 @@ export async function downloadFile(path: string) {
 export type ServerFile = { name: string; path: string; size: number };
 export async function listFiles(): Promise<ServerFile[]> { return request(`/client/${await client()}/files`); }
 export async function deleteFile(name: string) { return request(`/client/${await client()}/files/${encodeURIComponent(name)}`, { method: "DELETE" }); }
-async function allocate(name: string): Promise<{ path: string; name: string }> {
-  return request(`/client/${await client()}/files`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+async function allocate(name: string, size?: number): Promise<{ path: string; name: string }> {
+  return request(`/client/${await client()}/files`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, size }) });
 }
 export async function uploadFile(file: File): Promise<string> {
-  const id = await client(); const target = await allocate(file.name);
-  const result = await request<{ path: string }>(`/client/${id}/files/${encodeURIComponent(target.name)}`, { method: "PUT", body: file, headers: { "Content-Type": "application/octet-stream" } });
-  return result.path;
+  const id = await client(); const target = await allocate(file.name, file.size);
+  const chunkSize = 8 * 1024 * 1024;
+  try {
+    for (let start = 0; start < file.size; start += chunkSize) {
+      const end = Math.min(start + chunkSize, file.size);
+      await request(`/client/${id}/files/${encodeURIComponent(target.name)}`, {
+        method: "PATCH",
+        body: file.slice(start, end),
+        headers: { "Content-Type": "application/octet-stream", "Content-Range": `bytes ${start}-${end - 1}/${file.size}` }
+      });
+      const percent = Math.min(100, Math.round(end / file.size * 100));
+      status(`Subiendo ${file.name}: ${percent}%`);
+    }
+    status("");
+    return target.path;
+  } catch (error) {
+    await deleteFile(target.name).catch(() => {});
+    status("No se pudo completar la subida del archivo.");
+    throw error;
+  }
 }
 export async function saveFile(defaultName: string): Promise<string | null> {
   const value = await fileDialog("Guardar archivo", async (dialog, finish) => {
