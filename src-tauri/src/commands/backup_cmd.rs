@@ -426,6 +426,7 @@ pub use desktop::*;
 #[cfg(target_os = "android")]
 mod mobile {
     use super::*;
+    use crate::runtime as tauri;
 
     #[cfg_attr(feature = "desktop", tauri::command)]
     pub fn detect_backup_tools() -> CmdResult<Vec<serde_json::Value>> {
