@@ -4,6 +4,7 @@ import { useWorkspaces, workspacePending } from "../../stores/workspaceStore";
 import ContextMenu from "./ContextMenu";
 import { useT } from "../../i18n";
 import { useIsMobileLayout } from "../../lib/layout";
+import { isWeb } from "../../platform";
 
 const ENGINE_ICONS: Record<string, string> = {
   postgres: "🐘",
@@ -20,7 +21,8 @@ export default function Sidebar() {
   const { workspaces, order, active, setActive, closeWorkspace } = useWorkspaces();
   const [menu, setMenu] = useState<{ wsId: string; x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
-  // En el teléfono el rail es una barra inferior; backup no existe en Android.
+  // La web ejecuta los respaldos en el servidor, también desde el teléfono.
+  // El cliente nativo móvil no dispone de las herramientas de backup.
   const mobile = useIsMobileLayout();
 
   /** Cierra los workspaces, confirmando antes si alguno tiene cambios sin aplicar. */
@@ -84,7 +86,7 @@ export default function Sidebar() {
       >
         🕘
       </button>
-      {!mobile && (
+      {(isWeb || !mobile) && (
         <button
           className={`rail-btn ${active === "backup" ? "active" : ""}`}
           title={t("sidebar.backup")}
