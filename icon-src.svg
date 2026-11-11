@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#203f39"/>
+      <stop offset="1" stop-color="#102822"/>
+    </linearGradient>
+    <linearGradient id="carrot" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ffb34d"/>
+      <stop offset="1" stop-color="#f47726"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="url(#background)"/>
+  <g transform="rotate(35 512 512)">
+    <path d="M506 354C427 338 388 285 403 224C466 226 505 272 506 354Z" fill="#77bf71"/>
+    <path d="M514 346C472 290 477 216 519 178C562 222 560 293 514 346Z" fill="#a5db87"/>
+    <path d="M523 354C519 281 563 233 625 235C635 300 593 343 523 354Z" fill="#66b776"/>
+    <path d="M394 404C398 360 445 339 512 339C579 339 626 360 630 404C635 476 573 683 533 782C525 804 501 804 491 782C451 683 389 476 394 404Z" fill="url(#carrot)"/>
+    <path d="M422 404C425 382 450 371 478 369" fill="none" stroke="#ffd18a" stroke-width="20" stroke-linecap="round"/>
+    <path d="M402 464H458M574 535H608M445 620H487" fill="none" stroke="#cf5b20" stroke-width="22" stroke-linecap="round"/>
+  </g>
+</svg>
